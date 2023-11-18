@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 
 exports.createStaff = async (req, res) => {
   try {
-    const { fullName, email, password } = req.body;
+    const { fullName, email, password, roles } = req.body;
 
     const existingStaff = await Staff.findOne({ email });
     if (existingStaff) {
@@ -16,7 +16,8 @@ exports.createStaff = async (req, res) => {
     const newStaff = new Staff({
       fullName,
       email,
-      password: hashedPassword
+      password: hashedPassword,
+      roles: roles || [],
     });
 
     const savedStaff = await newStaff.save();
@@ -108,10 +109,14 @@ exports.loginStaff = async (req, res) => {
       if (!passwordMatch) {
         return res.status(401).json({ error: 'Invalid email or password' });
       }
+      const staffRoles = staff.roles;
+      const tokenPayload = {
+        staffId: staff._id,
+        staffRoles: staffRoles
+      };
+      const token = jwt.sign(tokenPayload, process.env.JWT_SECRET_KEY, { expiresIn: '1d' });
   
-      const token = jwt.sign({ staffId: staff._id }, process.env.JWT_SECRET_KEY, { expiresIn: '1d' });
-  
-      res.cookie('staffToken', token);
+      res.setHeader('Authorization', `Bearer ${token}`);
       res.status(200).json({ message: 'Login successful', staffToken: token });
     } catch (error) {
       console.error(error);

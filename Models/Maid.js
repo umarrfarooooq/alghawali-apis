@@ -1,28 +1,89 @@
 const mongoose = require("mongoose");
 
 const maidSchema = new mongoose.Schema({
-    code:String,
-    name: String,
-    nationality: String,
-    position:String,
-    salery:Number,
-    price:Number,
-    religion:String,
-    maritalStatus:String,
-    childrens:Number,
-    age:Number,
-    education:String,
-    languages:Array,
-    contractPeriod:String,
-    remarks:String,
-    addedBy:String,
-    maidImg:String,
-    maidImg2:String,
-    maidImg3:String,
-    maidImg4:String,
-    videoLink:String,
-    appliedFor:String,
-    experience:String,
+    code: {
+      type: String,
+      required: true,
+    },
+    name:  {
+      type: String,
+      required: true,
+    },
+    nationality: {
+      type: String,
+      required: true,
+    },
+    position: {
+      type: String,
+      required: false,
+    },
+    salery: {
+      type: Number,
+      required: true,
+    },
+    price: {
+      type: Number,
+      required: false,
+    },
+    religion: {
+      type: String,
+      required: true,
+    },
+    maritalStatus: {
+      type: String,
+      required: true,
+    },
+    childrens: {
+      type: Number,
+      required: false,
+    },
+    age: {
+      type: Number,
+      required: true,
+    },
+    education: {
+      type: String,
+      required: true,
+    },
+    languages: {
+      type: Array,
+      required: true,
+    },
+    contractPeriod: {
+    type: String,
+    required: true,
+  },
+    remarks: {
+    type: String,
+    required: true,
+  },
+    addedBy: {
+    type: String,
+    required: false,
+  },
+    maidImg: {
+    type: String,
+    required: true,
+  },
+    maidImg2: {
+    type: String,
+  },
+    maidImg3: {
+    type: String,
+  },
+    maidImg4: {
+    type: String,
+  },
+    videoLink: {
+    type: String,
+  },
+    appliedFor: {
+    type: String,
+    required: true,
+  },
+    experience: {
+    type: String,
+  },
     isHired: {
       type: Boolean,
       default: false

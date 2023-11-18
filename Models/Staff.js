@@ -15,11 +15,10 @@ const staffSchema = new mongoose.Schema({
     required: true
   },
   image: String,
-  role: {
-    type: String,
-    enum: ['Super Admin', 'Admin', 'Staff Member'],
-    default: 'Staff Member',
-  },
+  roles: [{
+    type: Number,
+    default: 0
+  }],
   timestamp: { type: Date, default: Date.now }
 });
 

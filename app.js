@@ -40,12 +40,9 @@ app.use('/api/v1/interviews', interviewRoute);
 app.use('/api/v1/staff', staffRoute);
 
 // Pages 
-// app.use('/', adminHome)
 // app.use('/cv', cvRoute)
-// app.use("/login", loginRoute)
 
 
-// const adminHome = require("./Routes/adminHome")
 // const cvRoute = require("./Routes/CV/cv.routes")
 // const loginRoute = require("./Routes/auth.route")
 

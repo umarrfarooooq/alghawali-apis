@@ -13,9 +13,15 @@ const interviewSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  maidName:String,
+  maidName:{
+    type: String,
+    required: true
+  },
   maidImage:String,
-  clientEmail:String,
+  clientEmail:{
+    type: String,
+    required: false
+  },
   Status:{
     type:String,
     default:"Pending"

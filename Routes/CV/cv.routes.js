@@ -52,19 +52,6 @@ router.get('/pdf/:userId', async (req, res) => {
         await page.emulateMediaType('screen');
         await page.evaluateHandle('document.fonts.ready');
 
-        
-        // const cssFilePath = path.join(__dirname, '..', '..', 'public', 'assets', 'cv-css', 'font-awesome', 'css', 'all.min.css');
-        // const cssFilePath2 = path.join(__dirname, '..', '..', 'public', 'assets', 'cv-css', 'bootstrap.min.css');
-        // const cssFilePath3 = path.join(__dirname, '..', '..', 'public', 'assets', 'cv-css', 'aos.css');
-        // const cssFilePath4 = path.join(__dirname, '..', '..', 'public', 'assets', 'cv-css', 'main.css');
-
-        
-        // await page.addStyleTag({ path: cssFilePath });
-        // await page.addStyleTag({ path: cssFilePath2 });
-        // await page.addStyleTag({ path: cssFilePath3 });
-        // await page.addStyleTag({ path: cssFilePath4 });
-
-
         const pdfOptions = {
             printBackground: true,
             format: 'A4',

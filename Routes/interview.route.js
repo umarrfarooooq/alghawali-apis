@@ -1,10 +1,12 @@
 const express = require('express');
 const Interview = require("../Models/Interview")
 const router = express.Router();
-// const verifyAdminToken = require("../middlewears/verifyAdminToken")
+const verifyStaffToken = require("../middlewears/verifyStaffToken");
+const checkPermission = require("../middlewears/checkPermission")
+const roles = require("../config/roles")
 // CRUD
 
-router.get('/', async(req, res) =>{
+router.get('/', verifyStaffToken, checkPermission(roles.ShowPlannedInterview), async(req, res) =>{
     try {
         const allNumbers = await Interview.find();
         res.status(200).json(allNumbers);
@@ -13,7 +15,7 @@ router.get('/', async(req, res) =>{
       }
 });
 
-router.post('/', async(req, res) =>{
+router.post('/',  async(req, res) =>{
     try {
         const { phoneNumber, maidId, maidName, clientEmail } = req.body;
 
@@ -33,7 +35,7 @@ router.post('/', async(req, res) =>{
       }
 });
 
-router.put('/status/:id', async (req, res) => {
+router.put('/status/:id', verifyStaffToken, checkPermission(roles.ShowPlannedInterview), async (req, res) => {
   try {
     const interviewId = req.params.id;
 
@@ -53,7 +55,7 @@ router.put('/status/:id', async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res)=>{
+router.delete("/:id", verifyStaffToken , checkPermission(roles.ShowPlannedInterview), async (req, res)=>{
     try {
         const userId = req.params.id;
     
