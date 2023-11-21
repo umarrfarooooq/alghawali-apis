@@ -1,5 +1,11 @@
+const fs = require("fs")
 const Maid = require("../Models/Maid")
-const cloudinary = require("../config/cloudinaryConfig")
+const ffmpegStatic = require('ffmpeg-static');
+const ffmpeg = require('fluent-ffmpeg');
+const jimp = require('jimp');
+const { v4: uuidv4 } = require('uuid');
+const path = require("path");
+
 
 const generateUniqueCode = async (countryCode) => {
   let isUnique = false;
@@ -19,46 +25,87 @@ const generateUniqueCode = async (countryCode) => {
 
 exports.addMaid = async (req, res) =>{
   try {
-    const results = [];
-    const images = ['maidImg', 'maidImg2', 'maidImg3', 'maidImg4'];
+    const compressImages = async () => {
+      const images = ['maidImg', 'maidImg2', 'maidImg3', 'maidImg4'];
+      const imagePaths = [];
+    
+      for (const image of images) {
+        if (req.files[image] && req.files[image].length > 0) {
+          const imagePath = req.files[image][0].path;
+          const uniqueImageName = `${uuidv4()}_${image}.webp`;
+          const compressedImagePath = `uploads/images/${uniqueImageName}`;
+        
+          try {
+            const loadedImage = await jimp.read(imagePath);
+            loadedImage.resize(500, jimp.AUTO);
+            loadedImage.quality(50);
 
-    for (const image of images) {
-      if (req.files[image] && req.files[image].length > 0) {
-        const result = await cloudinary.uploader.upload(req.files[image][0].path, {
-          format: 'webp',
-          overwrite: true
-        });
-        results.push(result);
+            await loadedImage.writeAsync(compressedImagePath);
+
+            try {
+              await fs.promises.unlink(imagePath);
+            } catch (err) {
+              console.error('Error deleting original image:', err.message);
+            }
+    
+            imagePaths.push(compressedImagePath);
+          } catch (err) {
+            console.error('Error compressing image:', err.message);
+            imagePaths.push(undefined);
+          }
+        } else {
+          imagePaths.push(undefined);
+        }
       }
-      else {
-        results.push({ public_id: undefined });
+    
+      return imagePaths;
+    };
+    const compressedImagePaths = await compressImages();
+
+    let videoPath;
+    let compressedVideoPath;
+    let uniqueFilename;
+
+    const compressVideo = new Promise((resolve, reject) => {
+      if (req.files["videoLink"] && req.files["videoLink"][0]) {
+        const checkFile = req.files["videoLink"][0];
+        videoPath = checkFile.path;
+        compressedVideoPath = "uploads/maidVideos";
+        const videoBitrate = '500k';
+        const crfValue = '28';
+        uniqueFilename = `video_${Date.now()}.mp4`;
+
+        ffmpeg.setFfmpegPath(ffmpegStatic);
+
+        ffmpeg()
+          .input(videoPath)
+          .videoCodec('libx264')
+          .addOption('-crf', crfValue)
+          .addOption('-b:v', videoBitrate)
+          .output(`${compressedVideoPath}/${uniqueFilename}`)
+          .on('start', () => {
+            console.log('Compression started');
+          })
+          .on('end', () => {
+            console.log('Video compression complete.');
+            fs.unlink(videoPath, (err) => {
+              if (err) {
+                console.error('Error deleting the file:', err.message);
+              } else {
+                console.log('Original video file deleted successfully.');
+              }
+            });
+            resolve(`${compressedVideoPath}/${uniqueFilename}`);
+          })
+          .on('error', (err) => {
+            console.error('FFmpeg Error:', err.message);
+            reject('Error compressing the video.');
+          })
+          .run();
+      } else {
+        resolve('');
       }
-    }
-
-    if (req.files['videoLink'] && req.files['videoLink'].length > 0) {
-      const videoResult = await cloudinary.uploader.upload(req.files['videoLink'][0].path, {
-        resource_type: 'video',
-        format: 'webm',
-        overwrite: true,
-        secure: true,
-        eager_async: true,
-        eager: [
-          {
-              fetch_format: 'webm',
-          },
-      ],
-        transformation: [
-          { width: 1000, crop: 'scale' },
-          { quality: 'auto' },
-          { fetch_format: 'auto' }
-        ],
-      });
-      
-
-      results.push(videoResult);
-    } else {
-      results.push({ public_id: undefined });
-    }
+    });
 
     let country;
 
@@ -101,6 +148,7 @@ exports.addMaid = async (req, res) =>{
       ? [...req.body.languages.filter(lang => lang !== 'Other'), req.body.otherLanguages].join(', ')
       : req.body.languages.join(', ')
     : '';
+      const videoCompressionResult = await compressVideo;
 
       const newMaid = new Maid({
         code: maidCode,
@@ -119,11 +167,11 @@ exports.addMaid = async (req, res) =>{
         languages:allLanguages,
         contractPeriod:req.body.contractPeriod,
         remarks:req.body.remarks,
-        maidImg:results[0].public_id || '',
-        maidImg2:results[1].public_id || '',
-        maidImg3:results[2].public_id || '',
-        maidImg4:results[3].public_id || '',
-        videoLink:results[4].public_id || '',
+        maidImg: compressedImagePaths[0] || '',
+        maidImg2: compressedImagePaths[1] || '',
+        maidImg3: compressedImagePaths[2] || '',
+        maidImg4: compressedImagePaths[3] || '',
+        videoLink: videoCompressionResult || ''
       });
       const savedMaid = await newMaid.save();
   
@@ -146,63 +194,89 @@ exports.updateMaid = async (req, res) => {
       return res.status(404).json({ error: 'Maid not found' });
     }
 
-    let result;
+    let imagePath;
+    let compressedImagePath;
     if (req.file) {
-      await cloudinary.uploader.destroy(existingMaid.maidImg);
+      imagePath = req.file.path;
+      const uniqueImageName = `${uuidv4()}_maidImg.webp`;
+      compressedImagePath = `uploads/images/${uniqueImageName}`;
 
-      result = await cloudinary.uploader.upload(req.file.path, {
-        format: 'webp',
-        overwrite: true
-      });
+      try {
+        const loadedImage = await jimp.read(imagePath);
+        loadedImage.resize(500, jimp.AUTO);
+        loadedImage.quality(50);
+
+        await loadedImage.writeAsync(compressedImagePath);
+
+        if (existingMaid.maidImg) {
+          try {
+            await fs.promises.unlink(path.join(__dirname, '..', existingMaid.maidImg));
+          } catch (err) {
+            console.error('Error deleting previous image:', err.message);
+          }
+        }
+
+        try {
+          await fs.promises.unlink(imagePath);
+        } catch (err) {
+          console.error('Error deleting original image:', err.message);
+        }
+
+        const updatedMaid = {
+          ...updatedMaidData,
+          maidImg: compressedImagePath,
+        };
+
+        const updatedMaidInstance = await Maid.findByIdAndUpdate(maidId, updatedMaid, { new: true });
+
+        res.status(200).json(updatedMaidInstance);
+      } catch (err) {
+        console.error('Error compressing image:', err.message);
+        res.status(500).json({ error: 'An error occurred while updating maid data.' });
+      }
+    } else {
+      const updatedMaidInstance = await Maid.findByIdAndUpdate(maidId, updatedMaidData, { new: true });
+
+      res.redirect("/");
     }
-
-    const updatedMaid = {
-      ...updatedMaidData,
-      maidImg: result?.public_id || existingMaid.maidImg,
-    };
-
-    const updatedMaidInstance = await Maid.findByIdAndUpdate(maidId, updatedMaid, { new: true });
-
-    res.status(200).json(updatedMaidInstance);
   } catch (error) {
     res.status(500).json({ error: 'An error occurred' });
   }
 };
 
+exports.deleteMaid = async (req, res) => {
+  try {
+    const maidId = req.params.id;
+    const findMaidForDelete = await Maid.findById(maidId);
 
-exports.deleteMaid = async (req, res) =>{
-    try {
-        const maidId = req.params.id;
-        const findMaidForDelete = await Maid.findById({_id: maidId});
+    const imagePaths = [
+      findMaidForDelete.maidImg,
+      findMaidForDelete.maidImg2,
+      findMaidForDelete.maidImg3,
+      findMaidForDelete.maidImg4,
+      findMaidForDelete.videoLink
+    ];
 
-        if (findMaidForDelete.maidImg) {
-        await cloudinary.uploader.destroy(findMaidForDelete.maidImg);
+    for (const imagePath of imagePaths) {
+      if (imagePath) {
+        try {
+          await fs.promises.unlink(path.join(__dirname, '..', imagePath));
+        } catch (err) {
+          console.error('Error deleting image:', err.message);
         }
-        if (findMaidForDelete.maidImg2) {
-          await cloudinary.uploader.destroy(findMaidForDelete.maidImg2);
-        }
-    
-        if (findMaidForDelete.maidImg3) {
-          await cloudinary.uploader.destroy(findMaidForDelete.maidImg3);
-        }
-    
-        if (findMaidForDelete.maidImg4) {
-          await cloudinary.uploader.destroy(findMaidForDelete.maidImg4);
-        }
-        if (findMaidForDelete.videoLink) {
-          await cloudinary.uploader.destroy(findMaidForDelete.videoLink);
-        }
-
-        const deletedMaid = await Maid.findByIdAndDelete({_id: maidId});
-        if (!deletedMaid) {
-          return res.status(404).json({ error: 'Maid not found' });
-        }
-    
-        res.status(204).send("Deleted");
-      } catch (error) {
-        res.status(500).json({ error: 'An error occurred' });
       }
-}
+    }
+
+    const deletedMaid = await Maid.findByIdAndDelete({ _id: maidId });
+    if (!deletedMaid) {
+      return res.status(404).json({ error: 'Maid not found' });
+    }
+
+    res.status(204).send("Deleted");
+  } catch (error) {
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
 
 exports.getAllMaids = async (req, res) => {
   try {
@@ -268,8 +342,8 @@ exports.updateMaidAvailablity = async (req, res) => {
       }
       await existingMaid.save();
 
-      res.status(200).json(existingMaid);
-  } catch (error) {
+      res.status(200).send("Successfully Update Availablity")
+    } catch (error) {
       res.status(500).json({ error: 'An error occurred' });
   }
 }

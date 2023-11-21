@@ -35,7 +35,7 @@ router.get('/pdf/:userId', async (req, res) => {
 
         const browser = await puppeteer.launch({headless:"new", args:['--no-sandbox']});
         const page = await browser.newPage();
-        // await page.goto(`https://admin.panel.alghawalimanpower.com/cv/${maidId}`,{
+        // await page.goto(`https://apis.alghawalimanpower.com/cv/${maidId}`,{
         //     waitUntil:"networkidle2"
         // })
         await page.goto(`http://localhost:5000/cv/${maidId}`,{

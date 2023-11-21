@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+@page{
+  size: A4 portrait;
+}
+body {
+    overflow-x: hidden;
+    height: 297mm !important;
+    width: 210mm !important;
+}
+main {
+    overflow-x: hidden;
+    display: flex;
+    justify-content: center;
+    /* height: auto;
+    width: auto; */
+}
+
+
+    </style>
+    <title>pdf</title>
+</head>
+<body>
+    <main>
+        <div class="image-box">
+            <img class="pdfImg relative" src="https://res.cloudinary.com/dtcz2zuev/image/upload/v1700377075/alghawalimanpower/tj33etceanf43ajfh6xc.png" alt="">
+            
+        </div>
+        <div>
+          <div class="absolute top-[19%] right-[20%]">
+            <div class="name text-[2.6vw] font-[550] text-white">
+              <%= maidData.name %>
+            </div>
+          </div>
+          <div class="absolute top-[24%] left-[8.7%]">
+            <div class="upperImage w-[17.2vw] h-[17.5vw] font-[550] text-white">
+              <img class="w-full h-full object-cover object-top rounded-2xl" src="https://res.cloudinary.com/dtcz2zuev/image/upload/c_thumb,g_face,h_200,w_200,z_0.5/<%= maidData.maidImg %>" alt="">
+            </div>
+          </div>
+          <div class="absolute top-[24%] right-[22%]">
+            <div class="appliedFor text-[2.6vw] font-[550] text-[#262F32]">
+              <%= maidData.appliedFor %>
+            </div>
+          </div>
+          <div class="absolute top-[28.5%] right-[31%]">
+            <div class="salary text-[2.6vw] font-[550] text-[#262F32]">
+              <%= maidData.salery %> OMR
+            </div>
+          </div>
+          <div class="absolute top-[33%] right-[33.7%]">
+            <div class="contractPeriod text-[2.6vw] font-[550] text-[#262F32]">
+              <%= maidData.contractPeriod %>
+            </div>
+          </div>
+          <div class="absolute top-[46.4%] left-[32%]">
+            <div class="maritalStatus text-[2.6vw] font-[550] text-[#262F32]">
+              <%= maidData.maritalStatus %>
+            </div>
+          </div>
+          <div class="absolute top-[50.9%] left-[32%]">
+            <div class="childrens text-[2.6vw] font-[550] text-[#262F32]">
+              <%= maidData.childrens %>
+            </div>
+          </div>
+          <div class="absolute top-[55.3%] left-[32%]">
+            <div class="languages text-[2.6vw] font-[550] text-[#262F32]">
+              <%= maidData.languages %>
+            </div>
+          </div>
+          <div class="absolute top-[59.8%] left-[32%]">
+            <div class="experience text-[2.6vw] font-[550] text-[#262F32]">
+              <%= maidData.experience %>
+            </div>
+          </div>
+          <div class="absolute top-[64.3%] left-[32%]">
+            <div class="education text-[2.6vw] font-[550] text-[#262F32]">
+              <%= maidData.education %>
+            </div>
+          </div>
+          <div class="absolute top-[69%] left-[32%]">
+            <div class="nationality text-[2.6vw] font-[550] text-[#262F32]">
+              <%= maidData.nationality %>
+            </div>
+          </div>
+          <div class="absolute top-[73.4%] left-[32%]">
+            <div class="age text-[2.6vw] font-[550] text-[#262F32]">
+              <%= maidData.age %> Years Old
+            </div>
+          </div>
+          <div class="absolute top-[40%] right-[8.5%]">
+            <div class="upperImage w-[26vw] h-[52vw] font-[550] text-white">
+              <img class="w-full h-full object-cover object-top rounded-2xl" src="https://res.cloudinary.com/dtcz2zuev/image/upload/<%= maidData.maidImg %>" alt="">
+            </div>
+          </div>
+          <div class="absolute top-[80%] left-[21.7%]">
+            <div class="remarks text-[2.6vw] font-[400] text-[#fff] leading-[140%]">
+              <%= maidData.remarks %>
+            </div>
+
+        </div>
+        
+
+    </main>
+    
+</body>
+</html>

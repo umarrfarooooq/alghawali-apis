@@ -22,9 +22,11 @@ app.use(cookieParser());
 app.use(cors());
 app.use(bodyParser.urlencoded({extended:true}));
 app.use(express.json());
+app.set("views" , path.join(__dirname , "views"))
+app.set('view engine', 'ejs');
 app.use(methodOverride('_method'));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 
 // Routes
@@ -32,6 +34,7 @@ const maidRoutes = require("./Routes/maidRoutes");
 const userRoute= require("./Routes/userRoute")
 const staffRoute = require("./Routes/staff.route")
 const interviewRoute = require("./Routes/interview.route")
+const cvRoute = require("./Routes/CV/cv.routes")
 
 // API'S
 app.use('/api/v1/maids', maidRoutes);
@@ -40,13 +43,12 @@ app.use('/api/v1/interviews', interviewRoute);
 app.use('/api/v1/staff', staffRoute);
 
 // Pages 
-// app.use('/cv', cvRoute)
+app.use('/cv', cvRoute)
 
 
-// const cvRoute = require("./Routes/CV/cv.routes")
 // const loginRoute = require("./Routes/auth.route")
 
-const PORT = 5000
+const PORT = 5177
 
 app.listen(PORT, () =>{
     console.log("Server is runiing on port " + PORT );
