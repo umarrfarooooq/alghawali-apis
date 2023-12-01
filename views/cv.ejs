@@ -47,7 +47,11 @@ main {
           </div>
           <div class="absolute top-[24%] left-[8.7%]">
             <div class="upperImage w-[17.2vw] h-[17.5vw] font-[550] text-white">
-              <img class="w-full h-full object-cover object-top rounded-2xl" src="https://res.cloudinary.com/dtcz2zuev/image/upload/c_thumb,g_face,h_200,w_200,z_0.5/<%= maidData.maidImg %>" alt="">
+              <% if (maidData.maidImg  && maidData.maidImg.includes("uploads/")) { %>
+                <img class="w-full h-full object-cover object-top rounded-2xl" src="<%= `https://apis.alghawalimanpower.com/${maidData.maidImg}` %>" alt="">
+            <% } else { %>
+              <img class="w-full h-full object-cover object-top rounded-2xl" src="https://res.cloudinary.com/dtcz2zuev/image/upload/<%= maidData.maidImg %>" alt="">
+            <% } %>
             </div>
           </div>
           <div class="absolute top-[24%] right-[22%]">
@@ -101,8 +105,12 @@ main {
             </div>
           </div>
           <div class="absolute top-[40%] right-[8.5%]">
-            <div class="upperImage w-[26vw] h-[52vw] font-[550] text-white">
+            <div class="mainImage w-[26vw] h-[52vw] font-[550] text-white">
+              <% if (maidData.maidImg  && maidData.maidImg.includes("uploads/")) { %>
+                <img class="w-full h-full object-cover object-top rounded-2xl" src="<%= `https://apis.alghawalimanpower.com/${maidData.maidImg}` %>" alt="">
+            <% } else { %>
               <img class="w-full h-full object-cover object-top rounded-2xl" src="https://res.cloudinary.com/dtcz2zuev/image/upload/<%= maidData.maidImg %>" alt="">
+            <% } %>
             </div>
           </div>
           <div class="absolute top-[80%] left-[21.7%]">

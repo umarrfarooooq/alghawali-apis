@@ -38,7 +38,7 @@ router.get('/pdf/:userId', async (req, res) => {
         // await page.goto(`https://apis.alghawalimanpower.com/cv/${maidId}`,{
         //     waitUntil:"networkidle2"
         // })
-        await page.goto(`http://localhost:5000/cv/${maidId}`,{
+        await page.goto(`http://localhost:5177/cv/${maidId}`,{
             waitUntil:"networkidle2"
         })
         await page.setViewport({ width: 1122, height: 793 });
