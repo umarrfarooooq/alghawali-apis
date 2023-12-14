@@ -8,7 +8,7 @@ const roles = require("../config/roles")
 
 // CRUD
 router.get('/', maidController.getAllMaids);
-router.get('/withHired', verifyStaffToken, checkPermission(roles.ShowOurMaid), maidController.getAllMaidsWithHired);
+router.get('/withHired', verifyStaffToken, checkPermission(roles.ShowOurMaid) || checkPermission(roles.CanEditMaid), maidController.getAllMaidsWithHired);
 router.post('/', verifyStaffToken, checkPermission(roles.CanAddMaid), 
 upload.fields([
   { name: 'maidImg', maxCount: 1 },
@@ -17,8 +17,7 @@ upload.fields([
   { name: 'maidImg4', maxCount: 1 },
   { name: 'videoLink', maxCount: 1 },
 ]), maidController.addMaid);
-
-router.put('/:id', verifyStaffToken, checkPermission(roles.ShowOurMaid),
+router.put('/:id', verifyStaffToken, checkPermission(roles.CanEditMaid),
 upload.fields([
   { name: 'maidImg', maxCount: 1 },
   { name: 'maidImg2', maxCount: 1 },
@@ -27,9 +26,17 @@ upload.fields([
   { name: 'videoLink', maxCount: 1 },
 ]),
 maidController.updateMaid);
-
 router.put('/availablity/:id', verifyStaffToken,  checkPermission(roles.ShowOurMaid), maidController.updateMaidAvailablity);
 router.delete('/delete/:id', verifyStaffToken, checkPermission(roles.ShowOurMaid), maidController.deleteMaid);
 router.get('/:id', verifyStaffToken,  checkPermission(roles.ShowOurMaid), maidController.getMaid);
+
+// maid hiring routes
+
+router.post('/hiring/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts), upload.single('hiringSlip') , maidController.createHiring)
+router.get('/hirings/all', verifyStaffToken,  maidController.getAllHiring)
+router.get('/hiring/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts),  maidController.getHiringById)
+router.post('/unHiring/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts),  maidController.createListAgain)
+router.put('/hiring/update/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts),  upload.single('hiringSlip') ,  maidController.updateHiringById)
+router.get('/maid-history/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts),  maidController.getMaidHistory)
 
 module.exports = router;

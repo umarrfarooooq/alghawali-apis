@@ -1,5 +1,6 @@
 const fs = require("fs")
 const Maid = require("../Models/Maid")
+const Hiring = require("../Models/HiringDetail")
 const ffmpegStatic = require('ffmpeg-static');
 const ffmpeg = require('fluent-ffmpeg');
 const jimp = require('jimp');
@@ -427,8 +428,6 @@ exports.getAllMaidsWithHired = async (req, res) => {
   }
 };
 
-
-
 exports.getMaid = async (req, res) =>{
     try {
         const maidId = req.params.id;
@@ -465,3 +464,186 @@ exports.updateMaidAvailablity = async (req, res) => {
       res.status(500).json({ error: 'An error occurred' });
   }
 }
+
+
+exports.createHiring = async (req, res) => {
+  try {
+    const maidId = req.params.id;
+    const existingMaid = await Maid.findById(maidId);
+    if (!existingMaid) {
+      return res.status(404).json({ error: 'Maid not found' });
+    }
+    
+    const { fullName, totalAmount, advanceAmount, cosPhone, hiringBy } = req.body;
+    let hiringSlip;
+    
+    if (req.file) {
+      hiringSlip = req.file.path;
+    }
+
+    const newHiring = new Hiring({
+      fullName,
+      totalAmount,
+      advanceAmount,
+      cosPhone,
+      hiringSlip,
+      hiringBy,
+      maidId,
+      hiringStatus: true
+    });
+
+
+    if(!existingMaid.isHired){
+      existingMaid.isHired = true
+    }
+    
+    await existingMaid.save();
+    const savedHiring = await newHiring.save();
+
+    res.status(201).json(savedHiring);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
+
+
+exports.createListAgain = async (req, res) => {
+  try {
+    const maidId = req.params.id;
+    const existingMaid = await Maid.findById(maidId);
+    const { unHiringReason, returnAmount } = req.body;
+
+    if (!existingMaid) {
+      return res.status(404).json({ error: 'Maid not found' });
+    }
+
+    if (existingMaid.isHired) {
+      existingMaid.isHired = false;
+      await existingMaid.save();
+
+      const lastHiring = await Hiring.findOne({ maidId }).sort({ timestamp: -1 });
+      if(lastHiring){
+        lastHiring.hiringStatus = false
+        await lastHiring.save();
+      }
+      const newHiring = new Hiring({
+        maidId,
+        fullName: lastHiring ? lastHiring.fullName : 'No Prev Record',
+        totalAmount: 0,
+        advanceAmount: 0,
+        cosPhone: lastHiring ? lastHiring.cosPhone : '+999999999999',
+        hiringSlip: lastHiring ? lastHiring.hiringSlip : 'No Prev Record',
+        hiringBy: lastHiring ? lastHiring.hiringBy : 'No Prev Record',
+        hiringStatus: false,
+        returnAmount,
+        unHiringReason,
+      });
+
+      const savedHiring = await newHiring.save();
+      res.status(201).json(savedHiring);
+    } else {
+      return res.status(400).json({ error: 'Maid is not currently hired' });
+    }
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
+
+exports.getMaidHistory = async (req, res) => {
+  try {
+    const maidId = req.params.id;
+    const allHistoryOfMaid = await Hiring.find({maidId});
+    res.status(200).json(allHistoryOfMaid);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred', message: error });
+  }
+}
+
+exports.getAllHiring = async (req, res) => {
+  try {
+    const allHiring = await Hiring.find({ hiringStatus: true });
+    const allHiringWithHired = await Hiring.find();
+    let totalAdvanceAmount = 0;
+    let totalTotalAmount = 0;
+    let totalReturnAmount = 0;
+    let balanceAmount;
+    allHiring.forEach((hireHistory) => {
+      totalAdvanceAmount += hireHistory.advanceAmount || 0;
+      totalTotalAmount += hireHistory.totalAmount || 0;
+    });
+    allHiringWithHired.forEach((hireHistory) =>{
+      totalReturnAmount += hireHistory.returnAmount || 0;
+    })
+    balanceAmount = totalTotalAmount - totalAdvanceAmount ;
+    res.status(200).json({
+      allHiringWithHired,
+      totalAdvanceAmount,
+      balanceAmount,
+      totalTotalAmount,
+      totalReturnAmount,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred', message: error });
+  }
+};
+
+exports.getHiringById = async (req, res) => {
+  try {
+    const hiringId = req.params.id;
+    // const hiring = await Hiring.findOne({ hiringId }).sort({ timestamp: -1 });
+    const hiring = await Hiring.findById(hiringId);
+
+    if (!hiring) {
+      return res.status(404).json({ error: 'Hiring information not found' });
+    }
+
+    res.status(200).json(hiring);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
+
+exports.updateHiringById = async (req, res) => {
+  try {
+    const hiringId = req.params.id;
+    const updatedHiringData = req.body;
+
+    const existingHiring = await Hiring.findByIdAndUpdate(hiringId, updatedHiringData, { new: true });
+    if (req.file) {
+          const newHiringSlip = req.file.path;
+          if (newHiringSlip.image) {
+            await fs.unlink(path.join(__dirname, '..', existingHiring.image));
+          }
+          existingHiring.hiringSlip = newHiringSlip;
+        }
+    if (!existingHiring) {
+      return res.status(404).json({ error: 'Hiring information not found' });
+    }
+
+    res.status(200).json(existingHiring);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
+
+exports.deleteHiringById = async (req, res) => {
+  try {
+    const hiringId = req.params.id;
+
+    const deletedHiring = await Hiring.findByIdAndDelete(hiringId);
+    if (!deletedHiring) {
+      return res.status(404).json({ error: 'Hiring information not found' });
+    }
+
+    res.status(200).json({ message: 'Hiring information deleted successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
