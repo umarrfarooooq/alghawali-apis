@@ -34,12 +34,13 @@ const userRoute= require("./Routes/userRoute")
 const staffRoute = require("./Routes/staff.route")
 const interviewRoute = require("./Routes/interview.route")
 const cvRoute = require("./Routes/CV/cv.routes")
-
+const visaRoute = require("./Routes/visa.route")
 // API'S
 app.use('/api/v1/maids', maidRoutes);
 app.use('/api/v1/users', userRoute);
 app.use('/api/v1/interviews', interviewRoute);
 app.use('/api/v1/staff', staffRoute);
+app.use('/api/v1/visa', visaRoute);
 
 // Pages 
 app.use('/cv', cvRoute)

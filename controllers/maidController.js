@@ -11,13 +11,16 @@ const path = require("path");
 const generateUniqueCode = async (countryCode) => {
   let isUnique = false;
   let code;
+  let counter = 1;
 
   while (!isUnique) {
-    code = `${countryCode}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    code = `${countryCode}${counter.toString().padStart(4, '0')}`;
     const existingMaid = await Maid.findOne({ code });
 
     if (!existingMaid) {
       isUnique = true;
+    } else {
+      counter++;
     }
   }
 
@@ -113,17 +116,17 @@ exports.addMaid = async (req, res) =>{
     const nationality = req.body.nationality.toLowerCase();
 
     if (nationality === 'myanmar') {
-        country = 'ALGMMR';
+        country = 'MMR';
     } else if (nationality === 'nepal') {
-        country = 'ALGNEP';
+        country = 'NPL';
     } else if (nationality === 'sri lanka') {
-        country = 'ALGLKA';
+        country = 'LKA';
     } else if (nationality === 'india') {
-        country = 'ALGIND';
+        country = 'IND';
     }else if (nationality === 'philippines') {
-      country = 'ALGPHL';
+      country = 'PHL';
     } else {
-        country = 'ALGGLB';
+        country = 'GLB';
     }
     
     if (!country) {

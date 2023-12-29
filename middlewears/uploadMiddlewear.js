@@ -23,7 +23,7 @@ const upload = multer({
         return cb(new Error('Only video files (mp4, avi, mkv) are allowed!'), false);
       }
     } else {
-      if (!file.originalname.match(/\.(jpg|jpeg|png)$/)) {
+      if (!file.originalname.match(/\.(jpg|jpeg|png|pdf)$/)) {
         return cb(new Error('Only image files are allowed!'), false);
       }
     }
