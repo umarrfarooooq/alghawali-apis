@@ -477,9 +477,14 @@ exports.createHiring = async (req, res) => {
       return res.status(404).json({ error: 'Maid not found' });
     }
     
-    const { fullName, totalAmount, advanceAmount, cosPhone, hiringBy } = req.body;
+    const { fullName, totalAmount, advanceAmount, cosPhone, hiringBy, paymentMethod, receivedBy, hiringDate } = req.body;
     let hiringSlip;
-    
+    const selectedBank = req.body.selectedBank;
+    let receivedByWithBank ;
+    if(selectedBank){
+      receivedByWithBank = `${receivedBy} (${selectedBank})`
+    }
+
     if (req.file) {
       hiringSlip = req.file.path;
     }
@@ -492,6 +497,9 @@ exports.createHiring = async (req, res) => {
       hiringSlip,
       hiringBy,
       maidId,
+      paymentMethod,
+      receivedBy : selectedBank ? receivedByWithBank : receivedBy,
+      hiringDate,
       hiringStatus: true
     });
 
@@ -499,9 +507,19 @@ exports.createHiring = async (req, res) => {
     if(!existingMaid.isHired){
       existingMaid.isHired = true
     }
-    
-    await existingMaid.save();
+    const newPayment = {
+      paymentMethod,
+      totalAmount,
+      receivedAmoount: advanceAmount,
+      receivedBy: selectedBank ? receivedByWithBank : receivedBy,
+      paySlip: hiringSlip || '',
+      timestamp: Date.now()
+    };
+
+    newHiring.paymentHistory.push(newPayment);
+
     const savedHiring = await newHiring.save();
+    await existingMaid.save();
 
     res.status(201).json(savedHiring);
   } catch (error) {
@@ -522,14 +540,8 @@ exports.createListAgain = async (req, res) => {
     }
 
     if (existingMaid.isHired) {
-      existingMaid.isHired = false;
-      await existingMaid.save();
-
       const lastHiring = await Hiring.findOne({ maidId }).sort({ timestamp: -1 });
-      if(lastHiring){
-        lastHiring.hiringStatus = false
-        await lastHiring.save();
-      }
+
       const newHiring = new Hiring({
         maidId,
         fullName: lastHiring ? lastHiring.fullName : 'No Prev Record',
@@ -538,12 +550,23 @@ exports.createListAgain = async (req, res) => {
         cosPhone: lastHiring ? lastHiring.cosPhone : '+999999999999',
         hiringSlip: lastHiring ? lastHiring.hiringSlip : 'No Prev Record',
         hiringBy: lastHiring ? lastHiring.hiringBy : 'No Prev Record',
+        paymentMethod: lastHiring.paymentMethod ? lastHiring.paymentMethod : 'No Prev Record',
+        receivedBy: lastHiring.receivedBy ? lastHiring.receivedBy : 'No Prev Record',
+        hiringDate: lastHiring.hiringDate ? lastHiring.hiringDate : 'No Prev Record',
         hiringStatus: false,
         returnAmount,
         unHiringReason,
       });
 
+      existingMaid.isHired = false;
+
+      if(lastHiring){
+        lastHiring.hiringStatus = false
+        await lastHiring.save();
+      }
+
       const savedHiring = await newHiring.save();
+      await existingMaid.save();
       res.status(201).json(savedHiring);
     } else {
       return res.status(400).json({ error: 'Maid is not currently hired' });
@@ -573,9 +596,25 @@ exports.getAllHiring = async (req, res) => {
     let totalTotalAmount = 0;
     let totalReturnAmount = 0;
     let balanceAmount;
+
+    let receivedByTotal = {
+      Riya: 0,
+      Leena: 0,
+      Jitan: 0,
+      Ali: 0,
+    };
+    const extractName = (receivedBy) => {
+      const nameParts = receivedBy.split('(');
+      return nameParts[0].trim();
+    };
+
     allHiring.forEach((hireHistory) => {
       totalAdvanceAmount += hireHistory.advanceAmount || 0;
       totalTotalAmount += hireHistory.totalAmount || 0;
+      hireHistory.paymentHistory.forEach((payment) => {
+        const receivedByName = extractName(payment.receivedBy);
+        receivedByTotal[receivedByName] += payment.receivedAmoount || 0;
+      });
     });
     allHiringWithHired.forEach((hireHistory) =>{
       totalReturnAmount += hireHistory.returnAmount || 0;
@@ -583,10 +622,12 @@ exports.getAllHiring = async (req, res) => {
     balanceAmount = totalTotalAmount - totalAdvanceAmount ;
     res.status(200).json({
       allHiringWithHired,
+      allHiring,
       totalAdvanceAmount,
       balanceAmount,
       totalTotalAmount,
       totalReturnAmount,
+      receivedByTotal,
     });
   } catch (error) {
     console.error(error);
@@ -597,7 +638,6 @@ exports.getAllHiring = async (req, res) => {
 exports.getHiringById = async (req, res) => {
   try {
     const hiringId = req.params.id;
-    // const hiring = await Hiring.findOne({ hiringId }).sort({ timestamp: -1 });
     const hiring = await Hiring.findById(hiringId);
 
     if (!hiring) {
@@ -614,21 +654,66 @@ exports.getHiringById = async (req, res) => {
 exports.updateHiringById = async (req, res) => {
   try {
     const hiringId = req.params.id;
-    const updatedHiringData = req.body;
+    const updatedPaymentData = req.body;
+    const existingHiring = await Hiring.findById(hiringId);
 
-    const existingHiring = await Hiring.findByIdAndUpdate(hiringId, updatedHiringData, { new: true });
-    if (req.file) {
-          const newHiringSlip = req.file.path;
-          if (newHiringSlip.image) {
-            await fs.unlink(path.join(__dirname, '..', existingHiring.image));
-          }
-          existingHiring.hiringSlip = newHiringSlip;
-        }
     if (!existingHiring) {
       return res.status(404).json({ error: 'Hiring information not found' });
     }
 
-    res.status(200).json(existingHiring);
+    let paySlip;
+    
+    if (req.file) {
+      paySlip = req.file.path;
+    }
+
+    const newPayment = {
+      paymentMethod: updatedPaymentData.paymentMethod,
+      totalAmount: existingHiring.totalAmount,
+      receivedAmoount: parseFloat(updatedPaymentData.amountGivenByCustomer) || 0,
+      receivedBy: updatedPaymentData.selectedBank ? `${updatedPaymentData.receivedBy} (${updatedPaymentData.selectedBank})` : updatedPaymentData.receivedBy,
+      paySlip,
+      timestamp: Date.now(),
+    };
+
+    existingHiring.paymentHistory.push(newPayment);
+
+    existingHiring.advanceAmount += parseFloat(updatedPaymentData.amountGivenByCustomer) || 0;
+    existingHiring.paymentMethod = updatedPaymentData.paymentMethod;
+    existingHiring.receivedBy = updatedPaymentData.selectedBank ? `${updatedPaymentData.receivedBy} (${updatedPaymentData.selectedBank})` : updatedPaymentData.receivedBy;
+    existingHiring.hiringSlip = paySlip;
+
+    const savedHiring = await existingHiring.save();
+
+    res.status(200).json(savedHiring);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
+
+exports.editHiringById = async (req, res) => {
+  try {
+    const hiringId = req.params.id;
+    const updatedHiringData = req.body;
+    let paySlip;
+
+    if(req.file){
+      paySlip = req.file.path;
+      updatedHiringData.hiringSlip = paySlip
+    }
+
+    const updatedHiringInstance = await Hiring.findByIdAndUpdate(
+      hiringId,
+      updatedHiringData,
+      { new: true }
+    );
+
+    if (!updatedHiringInstance) {
+      return res.status(404).json({ error: 'Hiring information not found' });
+    }
+
+    res.status(200).json(updatedHiringInstance);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'An error occurred' });

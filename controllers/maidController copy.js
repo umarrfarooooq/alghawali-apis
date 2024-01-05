@@ -279,3 +279,18 @@ exports.updateMaidAvailablity = async (req, res) => {
   }
 };
 
+
+
+
+// {
+//   "fullName": "Test",
+//   "totalAmount": 2000,
+//   "advanceAmount": 1000,
+//   "cosPhone": 9876543210,
+//   "hiringBy": "Riya",
+//   "paymentMethod": "Cash",
+//   "receivedBy": "Leena",
+//   "contractStartDate": "2023-06-15",
+//   "contractEndDate": "2024-06-15"
+
+// }

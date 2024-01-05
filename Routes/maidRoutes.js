@@ -37,6 +37,13 @@ router.get('/hirings/all', verifyStaffToken,  maidController.getAllHiring)
 router.get('/hiring/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts),  maidController.getHiringById)
 router.post('/unHiring/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts),  maidController.createListAgain)
 router.put('/hiring/update/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts),  upload.single('hiringSlip') ,  maidController.updateHiringById)
+router.put('/hiring/edit/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts), upload.single('hiringSlip'), maidController.editHiringById)
 router.get('/maid-history/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts),  maidController.getMaidHistory)
 
 module.exports = router;
+
+// {
+//   "amountGivenByCustomer": 200,
+//   "paymentMethod":"Bank Transfer",
+//   "receivedBy":"Leena"
+// }

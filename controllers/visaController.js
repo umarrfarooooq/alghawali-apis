@@ -3,14 +3,35 @@ const fs = require('fs');
 const path = require('path');
 
 exports.getAllVisas = async (req, res) => {
-    try {
-      const allVisas = await Visa.find();
-      res.status(200).json({ visas: allVisas });
-    } catch (error) {
-      console.error('Error fetching visa details:', error);
-      res.status(500).json({ error: 'An error occurred', message: error.message });
+  try {
+    const { search, page = 1 } = req.query;
+
+    let query = {};
+
+    if (search) {
+      query = {
+        $or: [
+          { maidName: { $regex: search, $options: 'i' } },
+        ],
+      };
     }
-  };  
+
+    const visaCount = await Visa.countDocuments(query);
+
+    const perPage = visaCount > 0 ? visaCount : 15;
+
+    const offset = (page - 1) * perPage;
+
+    const allVisas = await Visa.find(query)
+      .skip(offset)
+      .limit(Number(perPage));
+
+    res.status(200).json({ visas: allVisas });
+  } catch (error) {
+    console.error('Error fetching visa details:', error);
+    res.status(500).json({ error: 'An error occurred', message: error.message });
+  }
+};
 
 exports.addVisaDetails = async (req, res) => {
     try {

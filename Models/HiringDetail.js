@@ -1,5 +1,16 @@
 const mongoose = require('mongoose');
 
+const UpdatePaymentHistorySchema = new mongoose.Schema({
+  paymentMethod: String,
+  totalAmount: Number,
+  receivedAmoount: Number,
+  receivedBy:String,
+  paySlip:String,
+  timestamp: { type: Date, default: Date.now }
+});
+
+
+
 const hiringSchema = new mongoose.Schema({
   fullName: {
     type: String,
@@ -8,6 +19,18 @@ const hiringSchema = new mongoose.Schema({
   maidId:{
     type: String,
     required: true
+  },
+  paymentMethod:{
+    type: String,
+    required: true
+  },
+  receivedBy:{
+    type: String,
+    required: true
+  },
+  hiringDate:{
+    type: Date,
+    required:true
   },
   totalAmount:{
     type: Number,
@@ -39,7 +62,7 @@ const hiringSchema = new mongoose.Schema({
   unHiringReason:{
     type: String
   },
-
+  paymentHistory:[UpdatePaymentHistorySchema],
   timestamp: { type: Date, default: Date.now }
 });
 
