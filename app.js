@@ -3,10 +3,12 @@ const express = require("express");
 const cookieParser = require('cookie-parser');
 const path = require("path");
 const bodyParser = require('body-parser');
+const cors = require('cors');
+const passport = require("passport")
 const app = express();
 const mongoose = require('mongoose');
+const session = require('express-session');
 const methodOverride = require('method-override');
-const cors = require('cors');
 mongoose.set('strictQuery', true);
 
 let mongoUri = process.env.MONGO_URL;
@@ -17,9 +19,8 @@ mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
     console.log(err);
 });
 
-
+app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
 app.use(cookieParser());
-app.use(cors());
 app.use(bodyParser.urlencoded({extended:true}));
 app.use(express.json());
 app.set("views" , path.join(__dirname , "views"))
@@ -27,7 +28,21 @@ app.set('view engine', 'ejs');
 app.use(methodOverride('_method'));
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
+app.use('/public', express.static(path.join(__dirname, '/public')));
 app.use('/uploads', express.static(path.join(__dirname, '/uploads')));
+app.use(
+    session({
+      secret: process.env.SESSION_SECRET,
+      resave: false,
+      saveUninitialized: true,
+      cookie: { secure: false }
+    })
+  );
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+
 // Routes
 const maidRoutes = require("./Routes/maidRoutes");
 const userRoute= require("./Routes/userRoute")

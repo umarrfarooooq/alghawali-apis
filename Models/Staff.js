@@ -6,19 +6,24 @@ const staffSchema = new mongoose.Schema({
     required: true
   },
   email: {
-    type: String,
-    required: true,
-    unique: true
+    type: String
   },
+  phoneNumber:String,
   password: {
     type: String,
-    required: true
+    required: false
   },
   image: String,
   roles: [{
     type: Number,
     default: 0
   }],
+  adminKnows:{
+    type : Boolean,
+    default: true
+  },
+  invitationToken: String,
+  invitationTokenExpiry: Date,
   timestamp: { type: Date, default: Date.now }
 });
 

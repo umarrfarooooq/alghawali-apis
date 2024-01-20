@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require('express');
 const Maid = require("../../Models/Maid")
 const router = express.Router();
@@ -35,13 +36,11 @@ router.get('/pdf/:userId', async (req, res) => {
 
         const browser = await puppeteer.launch({headless:"new", args:['--no-sandbox']});
         const page = await browser.newPage();
-        // await page.goto(`https://apis.alghawalimanpower.com/cv/${maidId}`,{
-        //     waitUntil:"networkidle2"
-        // })
-        await page.goto(`http://localhost:5177/cv/${maidId}`,{
+        
+        await page.goto(`${process.env.CURRENT_URL}cv/${maidId}`,{
             waitUntil:"networkidle2"
         })
-        await page.setViewport({ width: 1122, height: 793 });
+        await page.setViewport({ width: 2480, height: 3508 });
 
         const templatePath = path.join(__dirname, '..','..', 'views', 'cv.ejs');
         const templateContent = fs.readFileSync(templatePath, 'utf8');
@@ -55,7 +54,7 @@ router.get('/pdf/:userId', async (req, res) => {
         const pdfOptions = {
             printBackground: true,
             format: 'A4',
-            width: '1122px',
+            scale: .35
         };
 
         const pdfBuffer = await page.pdf(pdfOptions);
@@ -63,7 +62,7 @@ router.get('/pdf/:userId', async (req, res) => {
         await browser.close();
 
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=maid_${maidId}_cv.pdf`);
+        res.setHeader('Content-Disposition', `attachment; filename=${findMaid.name}_cv.pdf`);
         res.send(pdfBuffer);
     } catch (err) {
         console.log(err);

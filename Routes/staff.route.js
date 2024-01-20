@@ -6,11 +6,16 @@ const upload = require("../middlewears/uploadMiddlewear")
 const roles = require("../config/roles")
 const checkPermission = require("../middlewears/checkPermission")
 
+
 router.post('/', verifyStaffToken, checkPermission(roles.ShowAccessOnAddStaff),  upload.single("staffImage"), staffController.createStaff);
+router.get('/google', staffController.createStaffGoogle);
+router.get('/auth/google/access', staffController.createStaffGoogleCallback);
 router.get('/', verifyStaffToken,  checkPermission(roles.ShowAccessOnAddStaff), staffController.getAllStaff);
 router.post('/login', staffController.loginStaff)
 router.get('/:id', verifyStaffToken, checkPermission(roles.ShowAccessOnAddStaff), staffController.getStaffById);
 router.put('/:id', verifyStaffToken, checkPermission(roles.ShowAccessOnAddStaff), upload.single("staffImage"), staffController.updateStaffById);
 router.delete('/:id', verifyStaffToken, checkPermission(roles.ShowAccessOnAddStaff), staffController.deleteStaffById);
+router.post('/invite', verifyStaffToken, staffController.sendStaffInvitation)
+router.post('/invitation-signup', staffController.signupMember)
 
 module.exports = router;

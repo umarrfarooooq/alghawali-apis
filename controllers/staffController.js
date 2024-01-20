@@ -3,6 +3,37 @@ const path = require("path")
 const jwt = require('jsonwebtoken');
 const Staff = require('../Models/Staff');
 const bcrypt = require('bcryptjs');
+const passport = require("../config/passport");
+const crypto = require('crypto');
+
+exports.createStaffGoogle = (req, res, next) => {
+  passport.authenticate('google', {
+    scope: ['profile', 'email'],
+    prompt: 'select_account',
+  })(req, res, next);
+};
+
+exports.createStaffGoogleCallback = (req, res, next) => {
+  passport.authenticate('google', (err, user, info) => {
+    if (err) {
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+
+    if (!user) {
+      return res.redirect('http://localhost:5173/login');
+    }
+
+    const { _id, roles, fullName } = user;
+    const tokenPayload = {
+      staffId: _id,
+      staffRoles: roles,
+      staffName: fullName
+    };
+
+    const token = jwt.sign(tokenPayload, process.env.JWT_SECRET_KEY, { expiresIn: '1d' });
+    return res.redirect(`http://localhost:5173/?token=${token}`);
+  })(req, res, next);
+};
 
 exports.createStaff = async (req, res) => {
   try {
@@ -24,7 +55,8 @@ exports.createStaff = async (req, res) => {
       email,
       password,
       roles: roles || [],
-      image:staffImage
+      image:staffImage,
+      adminKnows: true,
     });
 
     const savedStaff = await newStaff.save();
@@ -35,6 +67,7 @@ exports.createStaff = async (req, res) => {
     res.status(500).json({ error: 'An error occurred' });
   }
 };
+
 
 exports.getAllStaff = async (req, res) => {
   try {
@@ -105,13 +138,19 @@ exports.deleteStaffById = async (req, res) => {
 
 exports.loginStaff = async (req, res) => {
     try {
-      const { email, password } = req.body;
-  
-      const staff = await Staff.findOne({ email });
+      const { loginIdentifier, password } = req.body;
+
+      const isEmail = /^\S+@\S+\.\S+$/.test(loginIdentifier);
+      const queryField = isEmail ? 'email' : 'phoneNumber';
+
+      const staff = await Staff.findOne({ [queryField]: loginIdentifier });
       if (!staff) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
-  
+
+      if(!staff.adminKnows){
+        return res.status(401).json({ error: 'You are not approved from admin' });
+      }
       const passwordMatch = await password === staff.password;
       if (!passwordMatch) {
         return res.status(401).json({ error: 'Invalid email or password' });
@@ -126,6 +165,60 @@ exports.loginStaff = async (req, res) => {
   
       res.setHeader('Authorization', `Bearer ${token}`);
       res.status(200).json({ message: 'Login successful', staffToken: token });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'An error occurred' });
+    }
+  };
+
+  exports.sendStaffInvitation = async (req, res) => {
+    try {
+      const { fullName, roles } = req.body;
+  
+      const invitationToken = crypto.randomBytes(32).toString('hex');
+      const invitationTokenExpiry = new Date();
+      invitationTokenExpiry.setDate(invitationTokenExpiry.getDate() + 3);
+  
+      const newStaff = new Staff({
+        fullName,
+        roles: roles || [],
+        adminKnows: true,
+        invitationToken,
+        invitationTokenExpiry,
+      });
+  
+      const savedStaff = await newStaff.save();
+  
+      const inviteLink = `http://localhost:5173/signup/${savedStaff.invitationToken}`;
+  
+      res.status(200).json({ inviteLink });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'An error occurred' });
+    }
+  };
+
+  exports.signupMember = async (req, res) => {
+    try {
+      const { phoneNumber, password, invitationToken } = req.body;
+  
+      const staff = await Staff.findOne({
+        invitationToken,
+        invitationTokenExpiry: { $gt: new Date() },
+      });
+  
+      if (!staff) {
+        return res.status(400).json({ error: 'Invalid invitation token or link has expired' });
+      }
+  
+      staff.phoneNumber = phoneNumber;
+      staff.password = password;
+      staff.invitationToken = undefined;
+      staff.invitationTokenExpiry = undefined;
+  
+      const savedMember = await staff.save();
+  
+      res.status(201).json(savedMember);
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: 'An error occurred' });

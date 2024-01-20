@@ -598,11 +598,44 @@ exports.getAllHiring = async (req, res) => {
     let balanceAmount;
 
     let receivedByTotal = {
-      Riya: 0,
-      Leena: 0,
-      Jitan: 0,
-      Ali: 0,
+      Riya: {
+        total: 0,
+        cash: 0,
+        cheque: 0,
+        bankTransfer: {
+          total: 0,
+        },
+        bankDetails: {},
+      },
+      Leena: {
+        total: 0,
+        cash: 0,
+        cheque: 0,
+        bankTransfer: {
+          total: 0,
+        },
+        bankDetails: {},
+      },
+      Jitan: {
+        total: 0,
+        cash: 0,
+        cheque: 0,
+        bankTransfer: {
+          total: 0,
+        },
+        bankDetails: {},
+      },
+      Ali: {
+        total: 0,
+        cash: 0,
+        cheque: 0,
+        bankTransfer: {
+          total: 0,
+        },
+        bankDetails: {},
+      },
     };
+
     const extractName = (receivedBy) => {
       const nameParts = receivedBy.split('(');
       return nameParts[0].trim();
@@ -611,15 +644,37 @@ exports.getAllHiring = async (req, res) => {
     allHiring.forEach((hireHistory) => {
       totalAdvanceAmount += hireHistory.advanceAmount || 0;
       totalTotalAmount += hireHistory.totalAmount || 0;
+
       hireHistory.paymentHistory.forEach((payment) => {
         const receivedByName = extractName(payment.receivedBy);
-        receivedByTotal[receivedByName] += payment.receivedAmoount || 0;
+        const paymentMethod = payment.paymentMethod;
+        const receivedAmount = payment.receivedAmoount || 0;
+
+        receivedByTotal[receivedByName].total += receivedAmount;
+
+        if (paymentMethod === 'Cash') {
+          receivedByTotal[receivedByName].cash += receivedAmount;
+        } else if (paymentMethod === 'Cheque') {
+          receivedByTotal[receivedByName].cheque += receivedAmount;
+        } else if (paymentMethod === 'Bank Transfer') {
+          const bankName = extractName(payment.receivedBy.split('(')[1]).replace(')', '');
+          if (!receivedByTotal[receivedByName].bankDetails.hasOwnProperty(bankName)) {
+            receivedByTotal[receivedByName].bankDetails[bankName] = 0;
+          }
+          receivedByTotal[receivedByName].bankDetails[bankName] += receivedAmount;
+
+          receivedByTotal[receivedByName].bankTransfer.total += receivedAmount;
+          receivedByTotal[receivedByName].bankTransfer[bankName] = receivedByTotal[receivedByName].bankDetails[bankName];
+        }
       });
     });
-    allHiringWithHired.forEach((hireHistory) =>{
+
+    allHiringWithHired.forEach((hireHistory) => {
       totalReturnAmount += hireHistory.returnAmount || 0;
-    })
-    balanceAmount = totalTotalAmount - totalAdvanceAmount ;
+    });
+
+    balanceAmount = totalTotalAmount - totalAdvanceAmount;
+
     res.status(200).json({
       allHiringWithHired,
       allHiring,
@@ -634,6 +689,8 @@ exports.getAllHiring = async (req, res) => {
     res.status(500).json({ error: 'An error occurred', message: error });
   }
 };
+
+
 
 exports.getHiringById = async (req, res) => {
   try {
