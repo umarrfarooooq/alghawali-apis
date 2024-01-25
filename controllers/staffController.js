@@ -189,7 +189,7 @@ exports.loginStaff = async (req, res) => {
   
       const savedStaff = await newStaff.save();
   
-      const inviteLink = `http://localhost:5173/signup/${savedStaff.invitationToken}`;
+      const inviteLink = `${process.env.FRONTEND_URL}signup/${savedStaff.invitationToken}`;
   
       res.status(200).json({ inviteLink });
     } catch (error) {

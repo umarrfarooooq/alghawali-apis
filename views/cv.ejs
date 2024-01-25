@@ -173,14 +173,14 @@ body {
               >
               <% if (maidData.maidImg  && maidData.maidImg.includes("uploads/")) { %>
                 <img
-                  class="h-full w-full min-h-[26.63rem] max-w-full object-cover rounded-2xl ml-1 absolute left-[0rem] top-[0.13rem] [transform:scale(1.039)]"
+                  class="h-full object-top w-full min-h-[26.63rem] max-w-full object-cover rounded-2xl ml-1 absolute left-[0rem] top-[0.13rem] [transform:scale(1.039)]"
                   loading="eager"
                   alt=""
                   src="<%= `${process.env.CURRENT_URL}${maidData.maidImg}` %>"
                 />
                 <% } else { %>
                     <img
-                    class="h-full w-full min-h-[26.63rem] max-w-full object-cover rounded-2xl ml-1 absolute left-[0rem] top-[0.13rem] [transform:scale(1.039)]"
+                    class="h-full object-top w-full min-h-[26.63rem] max-w-full object-cover rounded-2xl ml-1 absolute left-[0rem] top-[0.13rem] [transform:scale(1.039)]"
                     loading="eager"
                     alt=""
                     src="https://res.cloudinary.com/dtcz2zuev/image/upload/<%= maidData.maidImg %>"

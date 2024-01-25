@@ -61,6 +61,10 @@ const maidSchema = new mongoose.Schema({
     type: String,
     required: false,
   },
+    staffId: {
+    type: String,
+    required: false,
+  },
     maidImg: {
     type: String,
     required: true,

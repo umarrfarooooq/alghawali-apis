@@ -174,6 +174,7 @@ exports.addMaid = async (req, res) =>{
         contractPeriod:req.body.contractPeriod,
         remarks:req.body.remarks,
         addedBy:req.body.addedBy || '',
+        staffId:req.body.staffId || '',
         maidImg: compressedImagePaths[0] || '',
         maidImg2: compressedImagePaths[1] || '',
         maidImg3: compressedImagePaths[2] || '',
@@ -426,6 +427,22 @@ exports.getAllMaidsWithHired = async (req, res) => {
       .skip(offset)
       .limit(Number(perPage));
     res.status(200).json(allMaids);
+  } catch (error) {
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
+
+exports.getAllMaidsByStaffId = async (req, res) => {
+  try {
+    const { staffId } = req.params;
+
+    if (!staffId) {
+      return res.status(400).json({ error: 'Staff ID is required' });
+    }
+
+    const maidsByStaff = await Maid.find({ staffId : staffId });
+
+    res.status(200).json(maidsByStaff);
   } catch (error) {
     res.status(500).json({ error: 'An error occurred' });
   }

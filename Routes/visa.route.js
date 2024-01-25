@@ -6,14 +6,14 @@ const roles = require("../config/roles")
 const checkPermission = require("../middlewears/checkPermission")
 const visaController = require('../controllers/visaController')
 
-router.get("/", visaController.getAllVisas)
-router.post("/", upload.fields([
+router.get("/", verifyStaffToken, checkPermission(roles.canAccessOnVisa), visaController.getAllVisas)
+router.post("/", verifyStaffToken, checkPermission(roles.canAccessOnVisa), upload.fields([
     { name: 'maidImage', maxCount: 1 },
     { name: 'visaFile', maxCount: 1 },
   ]), visaController.addVisaDetails)
-router.put('/info/:id', upload.single('maidImage'), visaController.updateMaidProfile);
-router.put('/hiring-status/:id', visaController.updateHiringStatus);
-router.put('/extend-visa/:id', upload.single("visaFile"), visaController.extendVisaById);
-router.delete('/:id', visaController.deleteVisaById)
+router.put('/info/:id', verifyStaffToken, checkPermission(roles.canAccessOnVisa), upload.single('maidImage'), visaController.updateMaidProfile);
+router.put('/hiring-status/:id', verifyStaffToken, checkPermission(roles.canAccessOnVisa), visaController.updateHiringStatus);
+router.put('/extend-visa/:id', verifyStaffToken, checkPermission(roles.canAccessOnVisa), upload.single("visaFile"), visaController.extendVisaById);
+router.delete('/:id', verifyStaffToken, checkPermission(roles.canAccessOnVisa), visaController.deleteVisaById)
 
 module.exports = router;

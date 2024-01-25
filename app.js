@@ -19,7 +19,19 @@ mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
     console.log(err);
 });
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+const allowedOrigins = [
+  'https://www.alghawalimanpower.com',
+  'https://access.alghawalimanpower.com',
+  'https://admin.panel.alghawalimanpower.com',
+  'http://localhost:5173'
+];
+
+const corsOptions = {
+  origin: allowedOrigins,
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(bodyParser.urlencoded({extended:true}));
 app.use(express.json());
