@@ -8,6 +8,7 @@ const roles = require("../config/roles")
 
 // CRUD
 router.get('/', maidController.getAllMaids);
+router.get('/maidsInfo', verifyStaffToken, maidController.getMaidsInfo)
 router.get('/withHired', verifyStaffToken, checkPermission(roles.ShowOurMaid) || checkPermission(roles.CanEditMaid), maidController.getAllMaidsWithHired);
 router.get('/byStaff/:staffId' , verifyStaffToken, maidController.getAllMaidsByStaffId)
 router.post('/', verifyStaffToken, checkPermission(roles.CanAddMaid), 
@@ -29,7 +30,7 @@ upload.fields([
 maidController.updateMaid);
 router.put('/availablity/:id', verifyStaffToken,  checkPermission(roles.ShowOurMaid), maidController.updateMaidAvailablity);
 router.delete('/delete/:id', verifyStaffToken, checkPermission(roles.ShowOurMaid), maidController.deleteMaid);
-router.get('/:id', verifyStaffToken, maidController.getMaid);
+router.get('/:id', maidController.getMaid);
 
 // maid hiring routes
 

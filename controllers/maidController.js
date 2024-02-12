@@ -151,9 +151,10 @@ exports.addMaid = async (req, res) =>{
     const maidReligion = (req.body.religion === 'Other') ? req.body.otherReligion : req.body.religion;
     const allLanguages = Array.isArray(req.body.languages)
     ? req.body.languages.includes('Other')
-      ? [...req.body.languages.filter(lang => lang !== 'Other'), req.body.otherLanguages].join(', ')
-      : req.body.languages.join(', ')
-    : '';
+      ? [...req.body.languages.filter(lang => lang !== 'Other'), req.body.otherLanguages]
+      : req.body.languages
+    : [];
+
       const videoCompressionResult = await compressVideo;
 
       const newMaid = new Maid({
@@ -372,7 +373,7 @@ exports.deleteMaid = async (req, res) => {
 
 exports.getAllMaids = async (req, res) => {
   try {
-    const { search, page = 1 } = req.query;
+    const { search, countries, languages, religions, experiences, page = 1, category } = req.query;
 
     let query = {};
 
@@ -380,14 +381,65 @@ exports.getAllMaids = async (req, res) => {
 
     const perPage = maidCount > 0 ? maidCount : 15;
 
-    if (search) {
-      query = {
-        $or: [
-          { name: { $regex: search, $options: "i" } },
-          { code: { $regex: search, $options: "i" } },
-        ],
-      };
+    if (category && category !== 'All') {
+      query.appliedFor = category;
     }
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { code: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (countries && countries.length > 0) {
+      query.nationality = { $in: countries };
+    }
+
+    if (languages) {
+      let individualLanguages = [];
+    
+      if (Array.isArray(languages)) {
+        individualLanguages = languages
+          .flatMap((lang) => lang.split(",").map((l) => l.trim()))
+          .filter((lang) => lang !== "");
+      } else if (typeof languages === "string") {
+        individualLanguages = languages.split(",").map((l) => l.trim());
+      }
+        
+      if (individualLanguages.includes("Other")) {
+        query.languages = { $not: { $elemMatch: { $in: individualLanguages } } };
+      } else {
+        query.languages = { $elemMatch: { $in: individualLanguages } };
+      }
+    }
+    
+    
+    
+
+    
+    if (religions && religions.length > 0) {
+      if (religions.includes("Other")) {
+        query.$or = [
+          { religion: { $in: religions } },
+          { religion: { $nin: religions } },
+        ];
+      } else {
+        query.religion = { $in: religions };
+      }
+    }
+
+    if (experiences && experiences.length > 0) {
+      if (experiences.length === 1 && experiences[0] === "Experienced") {
+        query.experience = { $regex: /^\d/ };
+      } else if (experiences.length === 1 && experiences[0] === "New") {
+        query.experience = { $eq: "New" };
+      } else {
+        query.experience = { $exists: true };
+      }
+    }
+    
+    
 
     const offset = (page - 1) * perPage;
 
@@ -398,7 +450,8 @@ exports.getAllMaids = async (req, res) => {
     const availableMaids = allMaids.filter((maid) => !maid.isHired);
     res.status(200).json(availableMaids);
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred' });
+    console.error("Error fetching maid profiles:", error);
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 
@@ -485,6 +538,22 @@ exports.updateMaidAvailablity = async (req, res) => {
   }
 }
 
+exports.getMaidsInfo = async (req, res) => {
+  try {
+    const totalMaids = await Maid.countDocuments();
+    const hiredMaids = await Maid.countDocuments({ isHired: true });
+    const remainingMaids = totalMaids - hiredMaids;
+
+    res.status(200).json({
+      totalMaids,
+      hiredMaids,
+      remainingMaids,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
 
 exports.createHiring = async (req, res) => {
   try {

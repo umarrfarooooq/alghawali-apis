@@ -23,7 +23,8 @@ const allowedOrigins = [
   'https://www.alghawalimanpower.com',
   'https://access.alghawalimanpower.com',
   'https://admin.panel.alghawalimanpower.com',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  'http://localhost:3000',
 ];
 
 const corsOptions = {
