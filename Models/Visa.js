@@ -27,9 +27,13 @@ const visaSchema = new mongoose.Schema({
   },
   visaFile: {
     type: String,
-    required: true,
+    required: false,
   },
   maidImage: {
+    type: String,
+    required: false,
+  },
+  passportNo: {
     type: String,
     required: true,
   },

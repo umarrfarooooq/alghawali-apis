@@ -4,32 +4,33 @@ const path = require('path');
 
 exports.getAllVisas = async (req, res) => {
   try {
-    const { search, page = 1 } = req.query;
+      const { search, page = 1 } = req.query;
 
-    let query = {};
+      let query = {};
 
-    if (search) {
-      query = {
-        $or: [
-          { maidName: { $regex: search, $options: 'i' } },
-        ],
-      };
-    }
+      if (search) {
+          query = {
+              $or: [
+                  { maidName: { $regex: search, $options: 'i' } },
+                  { passportNo: { $regex: search, $options: 'i' } },
+              ],
+          };
+      }
 
-    const visaCount = await Visa.countDocuments(query);
+      const visaCount = await Visa.countDocuments(query);
 
-    const perPage = visaCount > 0 ? visaCount : 15;
+      const perPage = visaCount > 0 ? visaCount : 15;
 
-    const offset = (page - 1) * perPage;
+      const offset = (page - 1) * perPage;
 
-    const allVisas = await Visa.find(query)
-      .skip(offset)
-      .limit(Number(perPage));
+      const allVisas = await Visa.find(query)
+          .skip(offset)
+          .limit(Number(perPage));
 
-    res.status(200).json({ visas: allVisas });
+      res.status(200).json({ visas: allVisas });
   } catch (error) {
-    console.error('Error fetching visa details:', error);
-    res.status(500).json({ error: 'An error occurred', message: error.message });
+      console.error('Error fetching visa details:', error);
+      res.status(500).json({ error: 'An error occurred', message: error.message });
   }
 };
 
@@ -39,15 +40,17 @@ exports.addVisaDetails = async (req, res) => {
         maidName,
         dateEntry,
         visaEndTime,
+        passportNo
       } = req.body;
       
-        const maidImage = req.files['maidImage'][0].path;
-        const visaFile = req.files['visaFile'][0].path;
+      const maidImage = req.files && req.files['maidImage'] && req.files['maidImage'][0] && req.files['maidImage'][0].path;
+      const visaFile = req.files && req.files['visaFile'] && req.files['visaFile'][0] && req.files['visaFile'][0].path;
 
       const newVisa = new Visa({
         maidName,
         dateEntry,
         visaEndTime,
+        passportNo,
         visaFile,
         maidImage
       });
@@ -64,7 +67,6 @@ exports.addVisaDetails = async (req, res) => {
 exports.extendVisaById = async (req, res) => {
     try {
       const {
-        newVisaEntryDate,
         newVisaEndDate,
       } = req.body;
       
@@ -82,6 +84,9 @@ exports.extendVisaById = async (req, res) => {
     if (req.file) {
         visaFile = req.file.path;
     }
+        const prevVisaEndDate = new Date(visaDetails.visaEndTime);
+        const newVisaEntryDate = new Date(prevVisaEndDate);
+        newVisaEntryDate.setDate(prevVisaEndDate.getDate() + 1);
 
       const extension = {
         newVisaEntryDate: visaDetails.dateEntry,
@@ -159,47 +164,68 @@ exports.updateHiringStatus = async (req, res) => {
 };
 
 
-  exports.deleteVisaById = async (req, res) => {
-    try {
+exports.deleteVisaById = async (req, res) => {
+  try {
       const { id } = req.params;
-  
+
       const visaDetails = await Visa.findById(id);
-  
+
       if (!visaDetails) {
-        return res.status(404).json({ message: 'Visa details not found' });
+          return res.status(404).json({ message: 'Visa details not found' });
       }
-        const historyFiles = visaDetails.extensionHistory.map((extension) => {
-        return path.join(__dirname, '..', extension.visaFile);
+
+      const historyFiles = visaDetails.extensionHistory.map((extension) => {
+          return extension.visaFile ? path.join(__dirname, '..', extension.visaFile) : null;
+      }).filter(Boolean);
+
+      const historyFilePromises = historyFiles.map(file => {
+          return new Promise((resolve, reject) => {
+              if (file) {
+                  fs.unlink(file, (err) => {
+                      if (err) {
+                          console.error('Error deleting history file:', err);
+                          reject(err);
+                      } else {
+                          resolve();
+                      }
+                  });
+              } else {
+                  resolve();
+              }
+          });
       });
-  
-      for (const file of historyFiles) {
-        try {
-          await fs.promises.unlink(file);
-          console.log('History file deleted successfully');
-        } catch (err) {
-          console.error('Error deleting history file:', err);
-        }
-      }
-  
+
+      await Promise.all(historyFilePromises);
+
       const filesToDelete = [
-        path.join(__dirname, '..', visaDetails.visaFile),
-        path.join(__dirname, '..', visaDetails.maidImage)
-      ];
-  
-      for (const file of filesToDelete) {
-        try {
-          await fs.promises.unlink(file);
-          console.log('File deleted successfully');
-        } catch (err) {
-          console.error('Error deleting file:', err);
-        }
-      }
-  
+          visaDetails.visaFile ? path.join(__dirname, '..', visaDetails.visaFile) : null,
+          visaDetails.maidImage ? path.join(__dirname, '..', visaDetails.maidImage) : null
+      ].filter(Boolean);
+
+      const filePromises = filesToDelete.map(file => {
+          return new Promise((resolve, reject) => {
+              if (file) {
+                  fs.unlink(file, (err) => {
+                      if (err) {
+                          console.error('Error deleting file:', err);
+                          reject(err);
+                      } else {
+                          resolve();
+                      }
+                  });
+              } else {
+                  resolve();
+              }
+          });
+      });
+
+      await Promise.all(filePromises);
+
       await Visa.findByIdAndDelete(id);
-  
+
       res.status(200).json({ message: 'Visa details and history deleted successfully' });
-    } catch (error) {
+  } catch (error) {
       console.error('Error deleting visa details:', error);
       res.status(500).json({ error: 'An error occurred', message: error.message });
-    }
-  };
+  }
+};

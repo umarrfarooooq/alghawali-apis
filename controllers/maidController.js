@@ -555,6 +555,7 @@ exports.getMaidsInfo = async (req, res) => {
   }
 };
 
+
 exports.createHiring = async (req, res) => {
   try {
     const maidId = req.params.id;
