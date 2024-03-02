@@ -9,8 +9,6 @@ const UpdatePaymentHistorySchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now }
 });
 
-
-
 const hiringSchema = new mongoose.Schema({
   fullName: {
     type: String,
@@ -26,7 +24,7 @@ const hiringSchema = new mongoose.Schema({
   },
   receivedBy:{
     type: String,
-    required: true
+    required: false
   },
   hiringDate:{
     type: Date,
@@ -43,13 +41,16 @@ const hiringSchema = new mongoose.Schema({
   returnAmount:{
     type: Number
   },
+  officeCharges:{
+    type: Number
+  },
   cosPhone:{
     type: Number,
     required: true
   },
   hiringSlip:{
     type: String,
-    required: false
+    required: true
   },
   hiringBy:{
     type: String,

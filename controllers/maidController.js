@@ -778,7 +778,6 @@ exports.getAllHiring = async (req, res) => {
 };
 
 
-
 exports.getHiringById = async (req, res) => {
   try {
     const hiringId = req.params.id;
