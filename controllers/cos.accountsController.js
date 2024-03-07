@@ -403,7 +403,6 @@ exports.getAllAccountsSummary = async (req, res) => {
       const sendedTotal = sendedByDetails[name] ? sendedByDetails[name].total || 0 : 0;
       receivedByDetails[name].remaining = receivedTotal - sendedTotal;
     });
-
     Object.keys(receivedByDetails).forEach(name => {
       remainingRecievedDetails[name] = {
         total: receivedByDetails[name].remaining,
@@ -427,6 +426,31 @@ exports.getAllAccountsSummary = async (req, res) => {
         }
       });
     });
+    Object.keys(sendedByDetails).forEach(sender => {
+      const receiver = sendedByDetails[sender].receivedBy;
+      if (receiver) {
+        remainingRecievedDetails[receiver] = remainingRecievedDetails[receiver] || {
+          total: 0,
+          cash: 0,
+          cheque: 0,
+          bankTransfer: {
+            total: 0,
+          },
+          bankDetails: {},
+        };
+    
+        remainingRecievedDetails[receiver].total += sendedByDetails[sender].total;
+        remainingRecievedDetails[receiver].cash += sendedByDetails[sender].cash;
+        remainingRecievedDetails[receiver].cheque += sendedByDetails[sender].cheque;
+        remainingRecievedDetails[receiver].bankTransfer.total += sendedByDetails[sender].bankTransfer.total;
+    
+        Object.keys(sendedByDetails[sender].bankDetails).forEach(bank => {
+          remainingRecievedDetails[receiver].bankDetails[bank] = (remainingRecievedDetails[receiver].bankDetails[bank] || 0) + sendedByDetails[sender].bankDetails[bank];
+        });
+      }
+    });
+    
+    
 
     res.status(200).json({
       totalAmount,

@@ -479,13 +479,15 @@ exports.getAllMaidsWithHired = async (req, res) => {
     const allMaids = await Maid.find(query)
       .skip(offset)
       .limit(Number(perPage));
-    res.status(200).json(allMaids);
+
+      const availableMaids = allMaids.filter((maid) => maid.isHired);
+    res.status(200).json(availableMaids);
   } catch (error) {
     res.status(500).json({ error: 'An error occurred' });
   }
 };
 
-exports.getAllMaidsByStaffId = async (req, res) => {
+exports.getAllHiredMaidsByStaffId = async (req, res) => {
   try {
     const { staffId } = req.params;
 
@@ -494,8 +496,23 @@ exports.getAllMaidsByStaffId = async (req, res) => {
     }
 
     const maidsByStaff = await Maid.find({ staffId : staffId });
+    const availableMaids = maidsByStaff.filter((maid) => maid.isHired);
+    res.status(200).json(availableMaids);
+  } catch (error) {
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
+exports.getAllNonHiredMaidsByStaffId = async (req, res) => {
+  try {
+    const { staffId } = req.params;
 
-    res.status(200).json(maidsByStaff);
+    if (!staffId) {
+      return res.status(400).json({ error: 'Staff ID is required' });
+    }
+
+    const maidsByStaff = await Maid.find({ staffId : staffId });
+    const availableMaids = maidsByStaff.filter((maid) => !maid.isHired);
+    res.status(200).json(availableMaids);
   } catch (error) {
     res.status(500).json({ error: 'An error occurred' });
   }

@@ -10,7 +10,8 @@ const roles = require("../config/roles")
 router.get('/', maidController.getAllMaids);
 router.get('/maidsInfo', verifyStaffToken, maidController.getMaidsInfo)
 router.get('/withHired', verifyStaffToken, checkPermission(roles.ShowOurMaid) || checkPermission(roles.CanEditMaid), maidController.getAllMaidsWithHired);
-router.get('/byStaff/:staffId' , verifyStaffToken, maidController.getAllMaidsByStaffId)
+router.get('/byStaff/hired/:staffId' , verifyStaffToken, maidController.getAllHiredMaidsByStaffId)
+router.get('/byStaff/non-hired/:staffId' , verifyStaffToken, maidController.getAllNonHiredMaidsByStaffId)
 router.post('/', verifyStaffToken, checkPermission(roles.CanAddMaid), 
 upload.fields([
   { name: 'maidImg', maxCount: 1 },
