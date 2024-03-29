@@ -1,6 +1,7 @@
 const Maid = require("../Models/Maid")
 const Hiring = require("../Models/HiringDetail");
 const CustomerAccount = require("../Models/Cos.Accounts");
+const StaffAccount = require("../Models/staffAccounts");
 
 
 function generateUniqueCode() {
@@ -26,7 +27,7 @@ exports.createHiring = async (req, res) => {
         return res.status(400).json({ error: 'Maid already hired' });
       }
       
-      const { fullName, totalAmount, advanceAmount, cosPhone, hiringBy, paymentMethod, receivedBy, hiringDate, staffAccount } = req.body;
+      const { fullName, totalAmount, advanceAmount, cosPhone, hiringBy, paymentMethod, receivedBy, hiringDate, staffAccount, staffId } = req.body;
       let hiringSlip;
       const selectedBank = req.body.selectedBank;
       do {
@@ -34,8 +35,10 @@ exports.createHiring = async (req, res) => {
     } while (await CustomerAccount.findOne({ uniqueCode }));
 
       let receivedByWithBank ;
+      let paymentMethodWithBank ;
       if(selectedBank){
         receivedByWithBank = `${receivedBy} (${selectedBank})`
+        paymentMethodWithBank = `${paymentMethod} (${selectedBank})`
       }
   
       if (req.file) {
@@ -80,6 +83,7 @@ exports.createHiring = async (req, res) => {
       const newCustomerAccount = new CustomerAccount({
         customerName: fullName,
         phoneNo: cosPhone,
+        staffId,
         profileName: existingMaid.name,
         profileId: existingMaid._id,
         profileCode: existingMaid.code,
@@ -98,6 +102,26 @@ exports.createHiring = async (req, res) => {
     });
 
       const savedCustomerAccount = await newCustomerAccount.save();
+
+      if (receivedBy) {
+        const existingStaffAccount = await StaffAccount.findOne({staffName : receivedBy});
+        if (!existingStaffAccount) {
+          return res.status(400).json({ error: 'Staff account not found' });
+        }
+  
+        existingStaffAccount.balance += advanceAmount;
+        existingStaffAccount.totalReceivedAmount += advanceAmount;
+        existingStaffAccount.accountHistory.push({
+          amount: advanceAmount,
+          paymentMethod : selectedBank ? paymentMethodWithBank  : paymentMethod,
+          receivedFrom: fullName,
+          type: 'Received',
+          date: hiringDate,
+          proof: hiringSlip,
+        });
+  
+        await existingStaffAccount.save();
+      }
 
       await existingMaid.save();
   
@@ -126,11 +150,15 @@ exports.listMaidAgain = async (req, res) => {
   
       let receiverWithBank;
       let senderWithBank;
+      let receivedPaymentMethodWithBank;
+      let sendedPaymentMethodWithBank;
       if (selectedBank && receivedBy) {
         receiverWithBank = `${receivedBy} (${selectedBank})`;
+        receivedPaymentMethodWithBank = `${paymentMethod} (${selectedBank})`;
       }
       if (selectedBank && sendedBy) {
         senderWithBank = `${sendedBy} (${selectedBank})`;
+        sendedPaymentMethodWithBank = `${paymentMethod} (${selectedBank})`;
       }
   
       if (req.file) {
@@ -191,6 +219,44 @@ exports.listMaidAgain = async (req, res) => {
         const updatedCustomerAccount = await customerAccount.save();
   
         existingMaid.isHired = false;
+
+
+        if (receivedBy) {
+          const existingStaffAccount = await StaffAccount.findOne({staffName : receivedBy});
+          if (!existingStaffAccount) {
+            return res.status(400).json({ error: 'Staff account not found' });
+          }
+    
+          existingStaffAccount.balance += receivedAmount;
+          existingStaffAccount.totalReceivedAmount += receivedAmount;
+          existingStaffAccount.accountHistory.push({
+            amount: receivedAmount,
+            paymentMethod : selectedBank ? receivedPaymentMethodWithBank : paymentMethod,
+            receivedFrom: customerAccount.customerName,
+            type: 'Received',
+            proof: paymentProof,
+          });
+    
+          await existingStaffAccount.save();
+        } else if (sendedBy) {
+          const existingStaffAccount = await StaffAccount.findOne({staffName : sendedBy});
+          if (!existingStaffAccount) {
+            return res.status(400).json({ error: 'Staff account not found' });
+          }
+    
+          existingStaffAccount.balance -= returnAmount;
+          existingStaffAccount.totalSentAmount += returnAmount;
+          existingStaffAccount.accountHistory.push({
+            amount: returnAmount,
+            paymentMethod : selectedBank ? sendedPaymentMethodWithBank : paymentMethod,
+            sendedTo: customerAccount.customerName,
+            type: 'Sent',
+            proof: paymentProof,
+          });
+    
+          await existingStaffAccount.save();
+        }
+
         await existingMaid.save();
   
         res.status(200).json({ updatedHiring, updatedCustomerAccount });
@@ -228,7 +294,7 @@ exports.listMaidAgain = async (req, res) => {
         customerAccount.accountHistory.push({
           officeCharges,
           returnAmount,
-          receivedAmount,
+          receivedAmount : receivedAmount || 0,
           paymentMethod,
           receivedBy : selectedBank ? receiverWithBank : receivedBy,
           sendedBy : selectedBank ? senderWithBank : sendedBy,
@@ -248,10 +314,6 @@ exports.listMaidAgain = async (req, res) => {
         } else {
           customerAccount.totalAmount = newMaidPrice;
           returnAmount ? customerAccount.returnAmount += parseFloat(returnAmount) : "";
-          customerAccount.receivedAmount -= parseFloat(returnAmount);
-        }
-        if (customerAccount.receivedAmount > customerAccount.totalAmount) {
-            return res.status(400).json("Recieved Amount exceeded total amount");
         }
 
         if (customerAccount.receivedAmount === customerAccount.totalAmount) {
@@ -264,6 +326,7 @@ exports.listMaidAgain = async (req, res) => {
         const updatedCustomerAccount = await customerAccount.save();
   
         existingMaid.isHired = false;
+        
         await existingMaid.save();
   
         const newHiring = new Hiring({
@@ -283,7 +346,7 @@ exports.listMaidAgain = async (req, res) => {
         newHiring.paymentHistory.push({
           paymentMethod,
           totalAmount: newMaidPrice,
-          receivedAmoount: receivedAmount,
+          receivedAmoount: receivedAmount || 0,
           receivedBy : selectedBank ? receiverWithBank : receivedBy,
           paySlip: paymentProof,
           timestamp: Date.now(),
@@ -292,6 +355,43 @@ exports.listMaidAgain = async (req, res) => {
         const savedNewHiring = await newHiring.save();
   
         newMaid.isHired = true;
+
+        if (receivedBy) {
+          const existingStaffAccount = await StaffAccount.findOne({staffName : receivedBy});
+          if (!existingStaffAccount) {
+            return res.status(400).json({ error: 'Staff account not found' });
+          }
+    
+          existingStaffAccount.balance += receivedAmount;
+          existingStaffAccount.totalReceivedAmount += receivedAmount;
+          existingStaffAccount.accountHistory.push({
+            amount: receivedAmount,
+            paymentMethod : selectedBank ? receivedPaymentMethodWithBank : paymentMethod,
+            receivedFrom: customerAccount.customerName,
+            type: 'Received',
+            proof: paymentProof,
+          });
+    
+          await existingStaffAccount.save();
+        } else if (sendedBy) {
+          const existingStaffAccount = await StaffAccount.findOne({staffName : sendedBy});
+          if (!existingStaffAccount) {
+            return res.status(400).json({ error: 'Staff account not found' });
+          }
+    
+          existingStaffAccount.balance -= returnAmount;
+          existingStaffAccount.totalSentAmount += returnAmount;
+          existingStaffAccount.accountHistory.push({
+            amount: returnAmount,
+            paymentMethod : selectedBank ? sendedPaymentMethodWithBank : paymentMethod,
+            sendedTo: customerAccount.customerName,
+            type: 'Sent',
+            proof: paymentProof,
+          });
+    
+          await existingStaffAccount.save();
+        }
+
         await newMaid.save();
   
         res.status(201).json({ updatedOldHiring, updatedCustomerAccount, savedNewHiring });
@@ -450,8 +550,6 @@ exports.getAllAccountsSummary = async (req, res) => {
       }
     });
     
-    
-
     res.status(200).json({
       totalAmount,
       receivedAmount,
@@ -532,6 +630,26 @@ exports.updateHiringAndPaymentById = async (req, res) => {
   
       customerAccount.accountHistory.push(newAccountHistoryItem);
   
+
+      if (newPayment.receivedBy) {
+        const existingStaffAccount = await StaffAccount.findOne({staffName : updatedPaymentData.receivedBy});
+        if (!existingStaffAccount) {
+          return res.status(400).json({ error: 'Staff account not found' });
+        }
+  
+        existingStaffAccount.balance += updatedReceivedAmount;
+        existingStaffAccount.totalReceivedAmount += updatedReceivedAmount;
+        existingStaffAccount.accountHistory.push({
+          amount: updatedReceivedAmount,
+          paymentMethod : updatedPaymentData.selectedBank ? `${updatedPaymentData.paymentMethod} (${updatedPaymentData.selectedBank})` : updatedPaymentData.paymentMethod,
+          receivedFrom: customerAccount.customerName,
+          type: 'Received',
+          proof: newPayment.paySlip,
+        });
+  
+        await existingStaffAccount.save();
+      }
+
       const savedCustomerAccount = await customerAccount.save();
   
       res.status(200).json({ savedHiring, savedCustomerAccount });
@@ -540,6 +658,7 @@ exports.updateHiringAndPaymentById = async (req, res) => {
       res.status(500).json({ error: 'An error occurred' });
     }
 };
+
 
 exports.updatePartialPaymentFromAccount = async (req, res) => {
     try {
@@ -563,22 +682,31 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
         return res.status(404).json({ error: 'Customer account not found' });
       }
       if (customerAccount.profileHiringStatus === 'Hired' || customerAccount.profileHiringStatus === 'Replaced') {
-        if ( !paymentData.amountGivenByCustomer || !paymentData.paymentMethod) {
+        if ( !(paymentData.amountGivenByCustomer || paymentData.amountReturnToCustomer) || !paymentData.paymentMethod) {
             return res.status(400).json({ error: 'Missing required fields hired or replace' });
           }
         const updatedReceivedAmount = parseFloat(paymentData.amountGivenByCustomer) || 0;
+        const updatedRturnAmount = parseFloat(paymentData.amountReturnToCustomer) || 0;
         const newReceivedAmount = customerAccount.receivedAmount + updatedReceivedAmount;
-    
-        if (newReceivedAmount > customerAccount.totalAmount) {
+        
+        if(paymentData.amountReturnToCustomer && parseFloat(paymentData.amountReturnToCustomer) > 0) {
+          customerAccount.receivedAmount -= parseFloat(paymentData.amountReturnToCustomer);
+          customerAccount.returnAmount > 0 ? customerAccount.returnAmount += parseFloat(paymentData.amountReturnToCustomer) : customerAccount.returnAmount = parseFloat(paymentData.amountReturnToCustomer) 
+        }else{
+          customerAccount.receivedAmount = newReceivedAmount;
+        }
+
+        if (newReceivedAmount > customerAccount.totalAmount && !paymentData.amountReturnToCustomer) {
           return res.status(400).json({ error: 'Received amount cannot exceed total amount' });
         }
     
-        customerAccount.receivedAmount = newReceivedAmount;
         customerAccount.cosPaymentStatus = newReceivedAmount === customerAccount.totalAmount ? 'Fully Paid' : 'Partially Paid';
     
         const newAccountHistoryItem = {
-          receivedAmount: updatedReceivedAmount,
-          receivedBy: paymentData.selectedBank ? `${paymentData.receivedBy} (${paymentData.selectedBank})` : paymentData.receivedBy,
+          receivedAmount: paymentData.amountGivenByCustomer && updatedReceivedAmount,
+          returnAmount : paymentData.amountReturnToCustomer && updatedRturnAmount ,
+          receivedBy: paymentData.amountGivenByCustomer && paymentData.selectedBank ? `${paymentData.receivedBy} (${paymentData.selectedBank})` : paymentData.receivedBy,
+          sendedBy: paymentData.amountReturnToCustomer && paymentData.selectedBank ? `${paymentData.sendedBy} (${paymentData.selectedBank})` : paymentData.sendedBy,
           paymentMethod: paymentData.paymentMethod,
           paymentProof : paySlip,
           staffAccount: paymentData.staffAccount,
@@ -603,6 +731,42 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
           await latestHiring.save();
           }
     
+          if (newAccountHistoryItem.receivedBy) {
+            const existingStaffAccount = await StaffAccount.findOne({staffName : paymentData.receivedBy});
+            if (!existingStaffAccount) {
+              return res.status(400).json({ error: 'Staff account not found' });
+            }
+      
+            existingStaffAccount.balance += newAccountHistoryItem.receivedAmount;
+            existingStaffAccount.totalReceivedAmount += newAccountHistoryItem.receivedAmount;
+            existingStaffAccount.accountHistory.push({
+              amount: newAccountHistoryItem.receivedAmount,
+              paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
+              receivedFrom: customerAccount.customerName,
+              type: 'Received',
+              proof: paySlip,
+            });
+      
+            await existingStaffAccount.save();
+          } else if (newAccountHistoryItem.sendedBy) {
+            const existingStaffAccount = await StaffAccount.findOne({staffName : paymentData.sendedBy});
+            if (!existingStaffAccount) {
+              return res.status(400).json({ error: 'Staff account not found' });
+            }
+      
+            existingStaffAccount.balance -= newAccountHistoryItem.returnAmount;
+            existingStaffAccount.totalSentAmount += newAccountHistoryItem.returnAmount;
+            existingStaffAccount.accountHistory.push({
+              amount: newAccountHistoryItem.returnAmount,
+              paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
+              sendedTo: customerAccount.customerName,
+              type: 'Sent',
+              proof: paySlip,
+            });
+            await existingStaffAccount.save();
+          }
+
+
         res.status(200).json({ message: 'Payment updated successfully', savedCustomerAccount });
       } else {
         if ( !paymentData.amountReturnToCustomer || !paymentData.paymentMethod) {
@@ -629,7 +793,41 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
         customerAccount.accountHistory.push(newAccountHistoryItem);
     
         const savedCustomerAccount = await customerAccount.save();
+        if (newAccountHistoryItem.receivedAmount) {
+          const existingStaffAccount = await StaffAccount.findOne({staffName : paymentData.receivedBy});
+          if (!existingStaffAccount) {
+            return res.status(400).json({ error: 'Staff account not found' });
+          }
     
+          existingStaffAccount.balance += newAccountHistoryItem.receivedAmount;
+          existingStaffAccount.totalReceivedAmount += newAccountHistoryItem.receivedAmount;
+          existingStaffAccount.accountHistory.push({
+            amount: newAccountHistoryItem.receivedAmount,
+            receivedFrom: customerAccount.customerName,
+            paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
+            type: 'Received',
+            proof: paySlip,
+          });
+    
+          await existingStaffAccount.save();
+        } else if (newAccountHistoryItem.sendedBy) {
+          const existingStaffAccount = await StaffAccount.findOne({staffName : paymentData.sendedBy});
+          if (!existingStaffAccount) {
+            return res.status(400).json({ error: 'Staff account not found' });
+          }
+    
+          existingStaffAccount.balance -= newAccountHistoryItem.returnAmount;
+          existingStaffAccount.totalSentAmount += newAccountHistoryItem.returnAmount;
+          existingStaffAccount.accountHistory.push({
+            amount: newAccountHistoryItem.returnAmount,
+            paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
+            sendedTo: customerAccount.customerName,
+            type: 'Sent',
+            proof: paySlip,
+          });
+    
+          await existingStaffAccount.save();
+        }
     
         res.status(200).json({ message: 'Payment updated successfully', savedCustomerAccount });
       }
@@ -644,6 +842,21 @@ exports.getAllAccounts = async (req, res) => {
     try {
         const allAccounts = await CustomerAccount.find();
         res.status(200).json(allAccounts);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'An error occurred' });
+    }
+};
+exports.getMyCustomerAccounts = async (req, res) => {
+    try {
+        const staffId = req.params.staffId;
+        const myAccount = await CustomerAccount.find({staffId});
+
+        if(!myAccount) {
+          return res.status(404).json({ error: 'Accounts information not found' });
+        }
+
+        res.status(200).json(myAccount);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'An error occurred' });

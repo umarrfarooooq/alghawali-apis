@@ -2,9 +2,24 @@ const fs = require("fs/promises")
 const path = require("path")
 const jwt = require('jsonwebtoken');
 const Staff = require('../Models/Staff');
-const bcrypt = require('bcryptjs');
 const passport = require("../config/passport");
 const crypto = require('crypto');
+const roles = require("../config/roles");
+const StaffAccount = require("../Models/staffAccounts");
+
+
+function generateUniqueCode() {
+  const uniqueCodeLength = 6;
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let uniqueCode = '';
+
+  for (let i = 0; i < uniqueCodeLength; i++) {
+      uniqueCode += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+
+  return uniqueCode;
+}
+
 
 exports.createStaffGoogle = (req, res, next) => {
   passport.authenticate('google', {
@@ -37,31 +52,40 @@ exports.createStaffGoogleCallback = (req, res, next) => {
 
 exports.createStaff = async (req, res) => {
   try {
-    const { fullName, email, password, roles } = req.body;
+    const { fullName, email, password, roles: userRoles } = req.body;
 
     const existingStaff = await Staff.findOne({ email });
     if (existingStaff) {
       return res.status(400).json({ error: 'Email already exists' });
     }
 
-
-    let staffImage;
-    if (req.file) {
-      staffImage = req.file.path;
-    }
+    const hasAccountsRole = userRoles.includes(roles.canAccessOnAccounts);
+    let savedStaff, savedStaffAccount;
 
     const newStaff = new Staff({
       fullName,
       email,
       password,
-      roles: roles || [],
-      image:staffImage,
+      roles: userRoles || [],
       adminKnows: true,
     });
 
-    const savedStaff = await newStaff.save();
+    savedStaff = await newStaff.save();
 
-    res.status(201).json(savedStaff);
+    if (hasAccountsRole) {
+      let staffCode ;
+      do {
+        staffCode = generateUniqueCode();
+      } while (await StaffAccount.findOne({ staffCode }));
+      const existingStaffAccount = await StaffAccount.findOne({ staffName: fullName });
+
+      if (existingStaffAccount) return res.status(400).json({ error: 'Staff account already exists' });
+
+      const newStaffAccount = new StaffAccount({ staffName: fullName, staffCode, staffId: savedStaff._id });
+      savedStaffAccount = await newStaffAccount.save();
+    }
+
+    res.status(201).json({ staff: savedStaff, staffAccount: savedStaffAccount });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'An error occurred' });
@@ -99,7 +123,25 @@ exports.updateStaffById = async (req, res) => {
   try {
     const staffId = req.params.id;
     const updatedStaffData = req.body;
+    const hasAccountsRole = updatedStaffData.roles && updatedStaffData.roles.includes(roles.canAccessOnAccounts);
 
+    if (hasAccountsRole) {
+      const existingStaffAccount = await StaffAccount.findOne({ staffName: updatedStaffData.fullName });
+
+      if (!existingStaffAccount) {
+        let staffCode;
+        do {
+          staffCode = generateUniqueCode();
+        } while (await StaffAccount.findOne({ staffCode }));
+
+        const newStaffAccount = new StaffAccount({ 
+          staffName: updatedStaffData.fullName, 
+          staffCode, 
+          staffId,
+      });
+        await newStaffAccount.save();
+      }
+    }
     const existingStaff = await Staff.findByIdAndUpdate(staffId, updatedStaffData, { new: true });
     if (req.file) {
       const newStaffImage = req.file.path;
@@ -201,7 +243,6 @@ exports.loginStaff = async (req, res) => {
   exports.signupMember = async (req, res) => {
     try {
       const { phoneNumber, password, invitationToken } = req.body;
-  
       const staff = await Staff.findOne({
         invitationToken,
         invitationTokenExpiry: { $gt: new Date() },
@@ -210,14 +251,28 @@ exports.loginStaff = async (req, res) => {
       if (!staff) {
         return res.status(400).json({ error: 'Invalid invitation token or link has expired' });
       }
-  
+      const hasAccountsRole = staff.roles.includes(roles.canAccessOnAccounts);
+
       staff.phoneNumber = phoneNumber;
       staff.password = password;
       staff.invitationToken = undefined;
       staff.invitationTokenExpiry = undefined;
   
       const savedMember = await staff.save();
-  
+
+      if (hasAccountsRole) {
+      let staffCode;
+      do {
+        staffCode = generateUniqueCode();
+      } while (await StaffAccount.findOne({ staffCode }));
+
+      const existingStaffAccount = await StaffAccount.findOne({ staffName: staff.fullName });
+
+      if (existingStaffAccount) return res.status(400).json({ error: 'Staff account already exists' });
+
+      const newStaffAccount = new StaffAccount({ staffName: staff.fullName, staffCode, staffId: staff._id });
+      await newStaffAccount.save();
+    }
       res.status(201).json(savedMember);
     } catch (error) {
       console.error(error);

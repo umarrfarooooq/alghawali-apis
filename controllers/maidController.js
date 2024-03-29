@@ -75,8 +75,8 @@ exports.addMaid = async (req, res) =>{
         const checkFile = req.files["videoLink"][0];
         videoPath = checkFile.path;
         compressedVideoPath = "uploads/maidVideos";
-        const videoBitrate = '100k';
-        const crfValue = '40';
+        const videoBitrate = '800k';
+        const crfValue = '28';
         uniqueFilename = `video_${Date.now()}.mp4`;
 
         ffmpeg.setFfmpegPath(ffmpegStatic);
@@ -254,8 +254,8 @@ exports.updateMaid = async (req, res) => {
       if (req.files['videoLink'] && req.files['videoLink'][0]) {
         const videoPath = req.files['videoLink'][0].path;
         const compressedVideoPath = "uploads/maidVideos";
-        const videoBitrate = '100k';
-        const crfValue = '40';
+        const videoBitrate = '800k';
+        const crfValue = '28';
         const uniqueFilename = `video_${Date.now()}.mp4`;
 
         ffmpeg.setFfmpegPath(ffmpegStatic);
@@ -741,8 +741,12 @@ exports.getAllHiring = async (req, res) => {
     };
 
     const extractName = (receivedBy) => {
-      const nameParts = receivedBy.split('(');
-      return nameParts[0].trim();
+      if (receivedBy) {
+        const nameParts = receivedBy.split('(');
+        return nameParts[0].trim();
+      } else {
+        return '';
+      }
     };
 
     allHiring.forEach((hireHistory) => {
@@ -753,7 +757,17 @@ exports.getAllHiring = async (req, res) => {
         const receivedByName = extractName(payment.receivedBy);
         const paymentMethod = payment.paymentMethod;
         const receivedAmount = payment.receivedAmoount || 0;
-
+        if (!receivedByTotal[receivedByName]) {
+          receivedByTotal[receivedByName] = {
+            bankTransfer: {
+              total: 0
+            }
+          };
+        } else if (!receivedByTotal[receivedByName].bankTransfer) {
+          receivedByTotal[receivedByName].bankTransfer = {
+            total: 0
+          };
+        }
         receivedByTotal[receivedByName].total += receivedAmount;
 
         if (paymentMethod === 'Cash') {
@@ -762,16 +776,25 @@ exports.getAllHiring = async (req, res) => {
           receivedByTotal[receivedByName].cheque += receivedAmount;
         } else if (paymentMethod === 'Bank Transfer') {
           const bankName = extractName(payment.receivedBy.split('(')[1]).replace(')', '');
-          if (!receivedByTotal[receivedByName].bankDetails.hasOwnProperty(bankName)) {
-            receivedByTotal[receivedByName].bankDetails[bankName] = 0;
-          }
+          if (receivedByTotal && receivedByTotal[receivedByName]) {
+            let bankDetails = receivedByTotal[receivedByName].bankDetails;
+            
+            if (!bankDetails || typeof bankDetails !== 'object') {
+                bankDetails = {};
+                receivedByTotal[receivedByName].bankDetails = bankDetails;
+            }
+        
+            if (!bankDetails.hasOwnProperty(bankName)) {
+                bankDetails[bankName] = 0;
+            }
+        }
           receivedByTotal[receivedByName].bankDetails[bankName] += receivedAmount;
 
           receivedByTotal[receivedByName].bankTransfer.total += receivedAmount;
           receivedByTotal[receivedByName].bankTransfer[bankName] = receivedByTotal[receivedByName].bankDetails[bankName];
         }
-      });
-    });
+              });
+            });
 
     allHiringWithHired.forEach((hireHistory) => {
       totalReturnAmount += hireHistory.returnAmount || 0;

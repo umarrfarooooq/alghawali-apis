@@ -8,6 +8,8 @@ const costumersAccountController = require("../controllers/cos.accountsControlle
 
 router.post('/hiring/:id',  verifyStaffToken, checkPermission(roles.canAccessOnAccounts), upload.single('hiringSlip') , costumersAccountController.createHiring)
 router.get('/all',  verifyStaffToken, checkPermission(roles.canAccessOnAccounts), costumersAccountController.getAllAccounts)
+router.get('/my-customers/:staffId',  verifyStaffToken, checkPermission(roles.canAccessOnAccounts), costumersAccountController.getMyCustomerAccounts)
+
 router.get('/accountsSummary',  verifyStaffToken, checkPermission(roles.canAccessOnAccounts), costumersAccountController.getAllAccountsSummary)
 router.get('/maid/:maidId',  verifyStaffToken, checkPermission(roles.canAccessOnAccounts), costumersAccountController.getAccountByMaidId)
 router.put('/payment/update/:id',   verifyStaffToken, checkPermission(roles.canAccessOnAccounts), upload.single('paymentProof') , costumersAccountController.updateHiringAndPaymentById)

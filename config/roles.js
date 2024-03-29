@@ -8,6 +8,7 @@ const roles = {
     CanEditMaid: 64,
     canAccessOnAccounts: 128,
     canAccessOnVisa: 256,
+    fullAccessOnAccounts : 512,
 };
 
 module.exports = roles

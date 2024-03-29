@@ -65,6 +65,7 @@ const cvRoute = require("./Routes/CV/cv.routes")
 const visaRoute = require("./Routes/visa.route")
 const customRequirementRoute = require("./Routes/customRequirement.route")
 const costumerAccountsRoute = require("./Routes/cos.accounts.route")
+const staffAccountsRoute = require("./Routes/staff.accounts.route")
 
 
 // API'S
@@ -75,6 +76,7 @@ app.use('/api/v1/staff', staffRoute);
 app.use('/api/v1/visa', visaRoute);
 app.use('/api/v1/customRequirements', customRequirementRoute);
 app.use('/api/v1/customerAccounts', costumerAccountsRoute);
+app.use('/api/v1/staffAccounts', staffAccountsRoute);
 
 // Pages 
 app.use('/cv', cvRoute)

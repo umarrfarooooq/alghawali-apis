@@ -17,6 +17,7 @@ const customerAccountSchema = new mongoose.Schema({
   phoneNo: { type: String, required: true },
   profileName: { type: String, required: true },
   profileId: { type: String },
+  staffId: { type: String },
   profileCode: { type: String, required: true },
   totalAmount: { type: Number, default: 0 },
   receivedAmount: { type: Number, default: 0 },
