@@ -559,18 +559,53 @@ exports.getMaidsInfo = async (req, res) => {
   try {
     const totalMaids = await Maid.countDocuments();
     const hiredMaids = await Maid.countDocuments({ isHired: true });
+    const unhiredMaids = await Maid.countDocuments({ isHired: false });
     const remainingMaids = totalMaids - hiredMaids;
+
+    const unHiredNationalityInfo = await Maid.aggregate([
+      { $match: { isHired: false } },
+      { $group: { _id: '$nationality', count: { $sum: 1 } } }
+    ]);
+
+    const hiredNationalityInfo = await Maid.aggregate([
+      { $match: { isHired: true } },
+      { $group: { _id: '$nationality', count: { $sum: 1 } } }
+    ]);
+
+    const allNationalityInfo = await Maid.aggregate([
+      { $group: { _id: '$nationality', count: { $sum: 1 } } }
+    ]);
+
+    const unHiredNationalityCount = {};
+    unHiredNationalityInfo.forEach(nationality => {
+      unHiredNationalityCount[nationality._id] = nationality.count;
+    });
+
+    const hiredNationalityCount = {};
+    hiredNationalityInfo.forEach(nationality => {
+      hiredNationalityCount[nationality._id] = nationality.count;
+    });
+
+    const allNationalityCount = {};
+    allNationalityInfo.forEach(nationality => {
+      allNationalityCount[nationality._id] = nationality.count;
+    });
 
     res.status(200).json({
       totalMaids,
       hiredMaids,
+      unhiredMaids,
       remainingMaids,
+      unHiredNationalityCount,
+      hiredNationalityCount,
+      allNationalityCount
     });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'An error occurred' });
   }
 };
+
 
 
 exports.createHiring = async (req, res) => {
