@@ -81,7 +81,7 @@ exports.createStaff = async (req, res) => {
 
       if (existingStaffAccount) return res.status(400).json({ error: 'Staff account already exists' });
 
-      const newStaffAccount = new StaffAccount({ staffName: fullName, staffCode, staffId: savedStaff._id });
+      const newStaffAccount = new StaffAccount({ staffName: fullName, staffCode, staffRoles: userRoles || [], staffId: savedStaff._id });
       savedStaffAccount = await newStaffAccount.save();
     }
 
@@ -138,6 +138,7 @@ exports.updateStaffById = async (req, res) => {
           staffName: updatedStaffData.fullName, 
           staffCode, 
           staffId,
+          staffRoles: updatedStaffData.roles
       });
         await newStaffAccount.save();
       }
@@ -270,7 +271,7 @@ exports.loginStaff = async (req, res) => {
 
       if (existingStaffAccount) return res.status(400).json({ error: 'Staff account already exists' });
 
-      const newStaffAccount = new StaffAccount({ staffName: staff.fullName, staffCode, staffId: staff._id });
+      const newStaffAccount = new StaffAccount({ staffName: staff.fullName, staffCode, staffRoles: staff.roles, staffId: staff._id });
       await newStaffAccount.save();
     }
       res.status(201).json(savedMember);

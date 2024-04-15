@@ -1,4 +1,6 @@
+const CustomerAccount = require('../Models/Cos.Accounts');
 const StaffAccount = require('../Models/staffAccounts');
+const roles = require('../config/roles');
 
 function generateUniqueCode() {
     const uniqueCodeLength = 6;
@@ -40,6 +42,31 @@ exports.getAllAccounts = async (req, res) => {
         console.error(error);
         res.status(500).json({ error: 'An error occurred' });
     }
+};
+exports.getAllAccountNames = async (req, res) => {
+  try {
+      const allAccounts = await StaffAccount.find({}, 'staffName');
+      const staffNames = allAccounts.map(account => account.staffName);
+      res.status(200).json(staffNames);
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'An error occurred' });
+  }
+};
+
+exports.getAllPendingApprovals = async (req, res) => {
+  try {
+    const staffAccounts = await StaffAccount.find({ pendingApprovals: { $exists: true, $not: { $size: 0 } } });
+
+    const pendingApprovals = staffAccounts.reduce((approvals, account) => {
+      return approvals.concat(account.pendingApprovals);
+    }, []);
+
+    res.status(200).json(pendingApprovals);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred while fetching pending approvals' });
+  }
 };
 
 exports.getAccountById = async (req, res) => {
@@ -140,32 +167,120 @@ exports.debitAmount = async (req, res) => {
     }
 
     if(!paySlip) {
-        return res.status(400).json({error: "Cannot proceed without payment proof"})
+      return res.status(400).json({error: "Cannot proceed without payment proof"})
     }
-
-    staffAccount.balance -= parseFloat(debitAmount);
-    staffAccount.totalSentAmount += parseFloat(debitAmount);
-
 
     const debitTransaction = {
       amount: debitAmount,
-      paymentMethod : selectedBank ? `${paymentMethod} (${selectedBank})` : paymentMethod,
+      paymentMethod: selectedBank ? `${paymentMethod} (${selectedBank})` : paymentMethod,
       type: 'Sent',
       proof: paySlip,
       sendedTo,
+      approved: false
     };
 
-    staffAccount.accountHistory.push(debitTransaction);
+   
+    if (req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)) {
+      staffAccount.balance -= parseFloat(debitAmount);
+      staffAccount.totalSentAmount += parseFloat(debitAmount);
+      debitTransaction.approved = true;
+    }
 
+    if (debitTransaction.approved) {
+      staffAccount.accountHistory.push(debitTransaction);
+    } else {
+      staffAccount.pendingApprovals.push(debitTransaction);
+    }
     await staffAccount.save();
 
-    res.status(200).json({ message: 'Debit amount updated successfully' });
+    if (debitTransaction.approved) {
+      return res.status(200).json({ message: 'Debit amount updated successfully' });
+    } else {
+      return res.status(200).json({ message: 'Debit request sent for approval' });
+    }
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'An error occurred while debiting amount' });
   }
 };
 
+exports.processPaymentRequest = async (req, res) => {
+  try {
+    const { requestId, approved } = req.body;
+    
+    const staffAccount = await StaffAccount.findOne({ 'pendingApprovals._id': requestId });
+    const customerAccount = await CustomerAccount.findOne({ 'accountHistory.pendingStaffId': requestId });
+
+    if (!staffAccount) {
+      return res.status(404).json({ error: 'Pending approval not found' });
+    }
+
+    const pendingApproval = staffAccount.pendingApprovals.id(requestId);
+    if (!pendingApproval) {
+      return res.status(404).json({ error: 'Pending approval not found' });
+    }
+    const { amount, paymentMethod, receivedFrom, type, proof , sendedTo} = pendingApproval;
+    if (approved) {
+      if (type === 'Received') {
+        staffAccount.balance += amount;
+        staffAccount.totalReceivedAmount += amount;
+        staffAccount.accountHistory.push({
+          amount,
+          paymentMethod,
+          receivedFrom,
+          type,
+          proof,
+          approved,
+          timestamp: Date.now()
+        });
+      } else if (type === 'Sent') {
+        staffAccount.balance -= amount;
+        staffAccount.totalSentAmount += amount;
+        staffAccount.accountHistory.push({
+          amount,
+          paymentMethod,
+          sendedTo: sendedTo,
+          type,
+          proof,
+          approved,
+          timestamp: Date.now()
+        });
+      }
+    }
+
+    staffAccount.pendingApprovals.remove(pendingApproval);
+    await staffAccount.save();
+    if(customerAccount) {
+      const historyToUpdate = customerAccount.accountHistory.find(history => history.pendingStaffId === requestId);
+      if (historyToUpdate) {
+        historyToUpdate.approved = true;
+        if (type === 'Received') {
+          if (approved) {
+            customerAccount.receivedAmount += amount;
+            if (customerAccount.receivedAmount >= customerAccount.returnAmount) {
+              customerAccount.cosPaymentStatus = 'Fully Paid';
+            }
+          }
+        } else if (type === 'Sent') {
+          if (approved) {
+            customerAccount.returnAmount += amount;
+            if (customerAccount.receivedAmount >= customerAccount.returnAmount) {
+              customerAccount.cosPaymentStatus = 'Fully Paid';
+            }
+          }
+        }
+        await customerAccount.save();
+      } else {
+        return res.status(404).json({ error: 'History not found in customer account' });
+      }
+    }
+    
+    res.status(200).json({ message: 'Payment request processed successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred while processing payment request' });
+  }
+};
 
 exports.getAllAccountsSummary = async (req, res) => {
   try {
@@ -244,79 +359,6 @@ exports.getAllAccountsSummary = async (req, res) => {
   }
 };
 
-exports.getAccountsSummaryByStaffId = async (req, res) => {
-    try {
-      const staffId = req.params.staffId;
-      const staffAccount = await StaffAccount.findOne({ staffId });
-  
-      if (!staffAccount) {
-        return res.status(404).json({ error: 'Staff account not found' });
-      }
-  
-      let accountSummary = {
-        staffName: staffAccount.staffName,
-        staffCode: staffAccount.staffCode,
-        balance: staffAccount.balance || 0,
-        totalReceivedAmount: 0,
-        totalSentAmount: 0,
-        transferAmount: 0,
-        transferHistory: [],
-        accountHistorySummary: {
-          received: {
-            total: 0,
-            cash: 0,
-            cheque: 0,
-            bankTransfer: 0,
-            bankDetails: {}
-          },
-          sent: {
-            total: 0,
-            cash: 0,
-            cheque: 0,
-            bankTransfer: 0,
-            bankDetails: {}
-          }
-        }
-      };
-  
-      staffAccount.accountHistory.forEach(history => {
-        if (history.type === 'Received') {
-          accountSummary.totalReceivedAmount += history.amount || 0;
-          accountSummary.accountHistorySummary.received.total += history.amount || 0;
-  
-          if (history.paymentMethod === 'Cash') {
-            accountSummary.accountHistorySummary.received.cash += history.amount || 0;
-          } else if (history.paymentMethod === 'Cheque') {
-            accountSummary.accountHistorySummary.received.cheque += history.amount || 0;
-          } else if (typeof history.paymentMethod === 'string' && history.paymentMethod.includes('Bank Transfer')) {
-            const bankNameMatch = history.paymentMethod.match(/\(([^)]+)\)/);
-            const bankName = bankNameMatch ? bankNameMatch[1] : "Unknown Bank";
-            accountSummary.accountHistorySummary.received.bankTransfer += history.amount || 0;
-            accountSummary.accountHistorySummary.received.bankDetails[bankName] = (accountSummary.accountHistorySummary.received.bankDetails[bankName] || 0) + (history.amount || 0);
-          }
-        } else if (history.type === 'Sent') {
-          accountSummary.totalSentAmount += history.amount || 0;
-          accountSummary.accountHistorySummary.sent.total += history.amount || 0;
-  
-          if (history.paymentMethod === 'Cash') {
-            accountSummary.accountHistorySummary.sent.cash += history.amount || 0;
-          } else if (history.paymentMethod === 'Cheque') {
-            accountSummary.accountHistorySummary.sent.cheque += history.amount || 0;
-          } else if (typeof history.paymentMethod === 'string' && history.paymentMethod.includes('Bank Transfer')) {
-            const bankNameMatch = history.paymentMethod.match(/\(([^)]+)\)/);
-            const bankName = bankNameMatch ? bankNameMatch[1] : "Unknown Bank";
-            accountSummary.accountHistorySummary.sent.bankTransfer += history.amount || 0;
-            accountSummary.accountHistorySummary.sent.bankDetails[bankName] = (accountSummary.accountHistorySummary.sent.bankDetails[bankName] || 0) + (history.amount || 0);
-          }
-        }
-      });
-  
-      res.status(200).json(accountSummary);
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'An error occurred' });
-    }
-};
 
 exports.getAccountSummary = async (req, res) => {
   try {
@@ -406,7 +448,6 @@ exports.getAccountSummary = async (req, res) => {
                   }
                   sent.Bank.details[bankName] += transaction.amount;
 
-                  // Add the bank to the received details if not already present
                   if (!received.Bank.details[bankName]) {
                       received.Bank.details[bankName] = 0;
                   }
@@ -414,7 +455,6 @@ exports.getAccountSummary = async (req, res) => {
           }
       });
 
-      // Calculate remaining bank balance
       const remainingBankDetails = {};
       Object.keys(received.Bank.details).forEach(bankName => {
           const receivedAmount = received.Bank.details[bankName] || 0;
@@ -447,6 +487,80 @@ exports.getAccountSummary = async (req, res) => {
       console.error(error);
       res.status(500).json({ error: 'An error occurred' });
   }
+};
+
+exports.getAccountsSummaryByStaffId = async (req, res) => {
+    try {
+      const staffId = req.params.staffId;
+      const staffAccount = await StaffAccount.findOne({ staffId });
+  
+      if (!staffAccount) {
+        return res.status(404).json({ error: 'Staff account not found' });
+      }
+  
+      let accountSummary = {
+        staffName: staffAccount.staffName,
+        staffCode: staffAccount.staffCode,
+        balance: staffAccount.balance || 0,
+        totalReceivedAmount: 0,
+        totalSentAmount: 0,
+        transferAmount: 0,
+        transferHistory: [],
+        accountHistorySummary: {
+          received: {
+            total: 0,
+            cash: 0,
+            cheque: 0,
+            bankTransfer: 0,
+            bankDetails: {}
+          },
+          sent: {
+            total: 0,
+            cash: 0,
+            cheque: 0,
+            bankTransfer: 0,
+            bankDetails: {}
+          }
+        }
+      };
+  
+      staffAccount.accountHistory.forEach(history => {
+        if (history.type === 'Received') {
+          accountSummary.totalReceivedAmount += history.amount || 0;
+          accountSummary.accountHistorySummary.received.total += history.amount || 0;
+  
+          if (history.paymentMethod === 'Cash') {
+            accountSummary.accountHistorySummary.received.cash += history.amount || 0;
+          } else if (history.paymentMethod === 'Cheque') {
+            accountSummary.accountHistorySummary.received.cheque += history.amount || 0;
+          } else if (typeof history.paymentMethod === 'string' && history.paymentMethod.includes('Bank Transfer')) {
+            const bankNameMatch = history.paymentMethod.match(/\(([^)]+)\)/);
+            const bankName = bankNameMatch ? bankNameMatch[1] : "Unknown Bank";
+            accountSummary.accountHistorySummary.received.bankTransfer += history.amount || 0;
+            accountSummary.accountHistorySummary.received.bankDetails[bankName] = (accountSummary.accountHistorySummary.received.bankDetails[bankName] || 0) + (history.amount || 0);
+          }
+        } else if (history.type === 'Sent') {
+          accountSummary.totalSentAmount += history.amount || 0;
+          accountSummary.accountHistorySummary.sent.total += history.amount || 0;
+  
+          if (history.paymentMethod === 'Cash') {
+            accountSummary.accountHistorySummary.sent.cash += history.amount || 0;
+          } else if (history.paymentMethod === 'Cheque') {
+            accountSummary.accountHistorySummary.sent.cheque += history.amount || 0;
+          } else if (typeof history.paymentMethod === 'string' && history.paymentMethod.includes('Bank Transfer')) {
+            const bankNameMatch = history.paymentMethod.match(/\(([^)]+)\)/);
+            const bankName = bankNameMatch ? bankNameMatch[1] : "Unknown Bank";
+            accountSummary.accountHistorySummary.sent.bankTransfer += history.amount || 0;
+            accountSummary.accountHistorySummary.sent.bankDetails[bankName] = (accountSummary.accountHistorySummary.sent.bankDetails[bankName] || 0) + (history.amount || 0);
+          }
+        }
+      });
+  
+      res.status(200).json(accountSummary);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'An error occurred' });
+    }
 };
 
 exports.getAllAccountSummary = async (req, res) => {

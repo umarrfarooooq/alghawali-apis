@@ -415,9 +415,6 @@ exports.getAllMaids = async (req, res) => {
     }
     
     
-    
-
-    
     if (religions && religions.length > 0) {
       if (religions.includes("Other")) {
         query.$or = [
@@ -438,7 +435,6 @@ exports.getAllMaids = async (req, res) => {
         query.experience = { $exists: true };
       }
     }
-    
     
 
     const offset = (page - 1) * perPage;

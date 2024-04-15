@@ -2,7 +2,7 @@ const Maid = require("../Models/Maid")
 const Hiring = require("../Models/HiringDetail");
 const CustomerAccount = require("../Models/Cos.Accounts");
 const StaffAccount = require("../Models/staffAccounts");
-
+const roles = require("../config/roles")
 
 function generateUniqueCode() {
     const uniqueCodeLength = 6;
@@ -66,6 +66,7 @@ exports.createHiring = async (req, res) => {
   
       if(!existingMaid.isHired){
         existingMaid.isHired = true
+        await existingMaid.save();
       }
       const newPayment = {
         paymentMethod,
@@ -86,9 +87,8 @@ exports.createHiring = async (req, res) => {
         staffId,
         profileName: existingMaid.name,
         profileId: existingMaid._id,
+        totalAmount : parseFloat(totalAmount),
         profileCode: existingMaid.code,
-        totalAmount: totalAmount,
-        receivedAmount: advanceAmount,
         uniqueCode: uniqueCode,
         profileHiringStatus: 'Hired',
         accountHistory: [{
@@ -102,25 +102,49 @@ exports.createHiring = async (req, res) => {
     });
 
       const savedCustomerAccount = await newCustomerAccount.save();
-
+      
       if (receivedBy) {
         const existingStaffAccount = await StaffAccount.findOne({staffName : receivedBy});
         if (!existingStaffAccount) {
           return res.status(400).json({ error: 'Staff account not found' });
         }
-  
-        existingStaffAccount.balance += advanceAmount;
-        existingStaffAccount.totalReceivedAmount += advanceAmount;
-        existingStaffAccount.accountHistory.push({
-          amount: advanceAmount,
-          paymentMethod : selectedBank ? paymentMethodWithBank  : paymentMethod,
-          receivedFrom: fullName,
-          type: 'Received',
-          date: hiringDate,
-          proof: hiringSlip,
-        });
-  
-        await existingStaffAccount.save();
+        if(req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)){
+          existingStaffAccount.balance += parseFloat(advanceAmount);
+          existingStaffAccount.totalReceivedAmount += parseFloat(advanceAmount);
+
+          newCustomerAccount.accountHistory[0].approved = true;
+          newCustomerAccount.receivedAmount += parseFloat(advanceAmount)
+          await newCustomerAccount.save()
+          existingStaffAccount.accountHistory.push({
+            amount: parseFloat(advanceAmount),
+            paymentMethod : selectedBank ? paymentMethodWithBank  : paymentMethod,
+            receivedFrom: fullName,
+            type: 'Received',
+            date: hiringDate,
+            proof: hiringSlip,
+            approved: true
+          });
+          await existingStaffAccount.save();
+          return res.status(200).json({ message: 'Transaction processed successfully' });
+        } else {
+          const pendingTransaction = {
+            amount: parseFloat(advanceAmount),
+            paymentMethod: selectedBank ? paymentMethodWithBank : paymentMethod,
+            receivedFrom: fullName,
+            type: 'Received',
+            date: hiringDate,
+            proof: hiringSlip,
+            receivedBy,
+            requestedBy: staffAccount,
+            approved: false
+          };
+          existingStaffAccount.pendingApprovals.push(pendingTransaction);
+          await existingStaffAccount.save();
+
+          newCustomerAccount.accountHistory[0].pendingStaffId = existingStaffAccount.pendingApprovals[existingStaffAccount.pendingApprovals.length - 1]._id;
+          await newCustomerAccount.save()
+          return res.status(200).json({ message: 'Transaction sent for approval' });
+        }
       }
 
       await existingMaid.save();
@@ -193,71 +217,174 @@ exports.listMaidAgain = async (req, res) => {
         }
         
         customerAccount.profileHiringStatus = 'Return';
-        customerAccount.accountHistory.push({
-          officeCharges,
-          returnAmount,
-          paymentMethod,
-          sendedBy: selectedBank ? senderWithBank : sendedBy,
-          paymentProof,
-          staffAccount,
-          date: Date.now(),
-        });
         
         const receivedAfterOfficeCharges = customerAccount.receivedAmount - parseFloat(officeCharges);        
-        customerAccount.receivedAmount = receivedAfterOfficeCharges >= 0 ? receivedAfterOfficeCharges : 0;
-        customerAccount.returnAmount = parseFloat(returnAmount);
-
-        if (customerAccount.receivedAmount < customerAccount.returnAmount) {
-            return res.status(400).json("Return Amount exceeded recieved amount");
-        }
-
-        if (customerAccount.receivedAmount === customerAccount.returnAmount) {
-            customerAccount.cosPaymentStatus = "Fully Paid"
-        }
+        customerAccount.receivedAmount = receivedAfterOfficeCharges ? receivedAfterOfficeCharges : 0;
 
         customerAccount.profileId = null;
         const updatedCustomerAccount = await customerAccount.save();
   
         existingMaid.isHired = false;
-
+        await existingMaid.save();
 
         if (receivedBy) {
-          const existingStaffAccount = await StaffAccount.findOne({staffName : receivedBy});
+          const existingStaffAccount = await StaffAccount.findOne({ staffName: receivedBy });
           if (!existingStaffAccount) {
             return res.status(400).json({ error: 'Staff account not found' });
           }
-    
-          existingStaffAccount.balance += receivedAmount;
-          existingStaffAccount.totalReceivedAmount += receivedAmount;
-          existingStaffAccount.accountHistory.push({
-            amount: receivedAmount,
-            paymentMethod : selectedBank ? receivedPaymentMethodWithBank : paymentMethod,
-            receivedFrom: customerAccount.customerName,
-            type: 'Received',
-            proof: paymentProof,
-          });
-    
-          await existingStaffAccount.save();
-        } else if (sendedBy) {
-          const existingStaffAccount = await StaffAccount.findOne({staffName : sendedBy});
-          if (!existingStaffAccount) {
-            return res.status(400).json({ error: 'Staff account not found' });
-          }
-    
-          existingStaffAccount.balance -= returnAmount;
-          existingStaffAccount.totalSentAmount += returnAmount;
-          existingStaffAccount.accountHistory.push({
-            amount: returnAmount,
-            paymentMethod : selectedBank ? sendedPaymentMethodWithBank : paymentMethod,
-            sendedTo: customerAccount.customerName,
-            type: 'Sent',
-            proof: paymentProof,
-          });
-    
-          await existingStaffAccount.save();
-        }
+        
+          if (req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)) {
+            existingStaffAccount.balance += parseFloat(receivedAmount);
+            existingStaffAccount.totalReceivedAmount += parseFloat(receivedAmount);
 
-        await existingMaid.save();
+            customerAccount.accountHistory.push({
+              officeCharges,
+              receivedAmount,
+              paymentMethod,
+              receivedBy: selectedBank ? receiverWithBank : receivedBy,
+              paymentProof,
+              staffAccount,
+              date: Date.now(),
+              approved : true
+            });
+
+            customerAccount.receivedAmount = parseFloat(receivedAmount);
+
+            if (customerAccount.receivedAmount < customerAccount.returnAmount) {
+                return res.status(400).json("Return Amount exceeded recieved amount");
+            }
+
+            if (customerAccount.receivedAmount === customerAccount.returnAmount) {
+                customerAccount.cosPaymentStatus = "Fully Paid"
+            }
+
+            existingStaffAccount.accountHistory.push({
+              amount: parseFloat(receivedAmount),
+              paymentMethod: selectedBank ? receivedPaymentMethodWithBank : paymentMethod,
+              receivedFrom: customerAccount.customerName,
+              type: 'Received',
+              proof: paymentProof,
+              approved: true 
+            });
+        
+            await existingStaffAccount.save();
+            await customerAccount.save();
+            return res.status(200).json({ message: 'Transaction processed successfully' });
+          } else {
+            const pendingTransaction = {
+              amount: parseFloat(receivedAmount),
+              paymentMethod: selectedBank ? receivedPaymentMethodWithBank : paymentMethod,
+              receivedFrom: customerAccount.customerName,
+              type: 'Received',
+              receivedBy,
+              requestedBy : staffAccount,
+              proof: paymentProof,
+              approved: false
+            };
+            existingStaffAccount.pendingApprovals.push(pendingTransaction);
+            await existingStaffAccount.save();
+
+            customerAccount.accountHistory.push({
+              officeCharges,
+              receivedAmount,
+              paymentMethod,
+              receivedBy: selectedBank ? receiverWithBank : receivedBy,
+              paymentProof,
+              staffAccount,
+              date: Date.now(),
+              approved : false,
+              pendingStaffId : existingStaffAccount.pendingApprovals[existingStaffAccount.pendingApprovals.length - 1]._id
+            });
+            
+
+            if (receivedAfterOfficeCharges < parseFloat(returnAmount)) {
+                return res.status(400).json("Return Amount exceeded recieved amount");
+            } 
+            await customerAccount.save()
+            return res.status(200).json({ message: 'Transaction sent for approval' });
+          }
+        } else if (sendedBy) {
+          const existingStaffAccount = await StaffAccount.findOne({ staffName: sendedBy });
+          if (!existingStaffAccount) {
+            return res.status(400).json({ error: 'Staff account not found' });
+          }
+        
+          if (req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)) {
+            existingStaffAccount.balance -= parseFloat(returnAmount);
+            existingStaffAccount.totalSentAmount += parseFloat(returnAmount);
+            existingStaffAccount.accountHistory.push({
+              amount: parseFloat(returnAmount),
+              paymentMethod: selectedBank ? sendedPaymentMethodWithBank : paymentMethod,
+              sendedTo: customerAccount.customerName,
+              type: 'Sent',
+              proof: paymentProof,
+              approved: true 
+            });
+
+            await existingStaffAccount.save();
+
+            customerAccount.accountHistory.push({
+              officeCharges,
+              returnAmount,
+              paymentMethod,
+              sendedBy: selectedBank ? senderWithBank : sendedBy,
+              paymentProof,
+              staffAccount,
+              date: Date.now(),
+              approved : true
+            });
+
+            customerAccount.returnAmount = parseFloat(returnAmount);
+
+            if (customerAccount.receivedAmount < customerAccount.returnAmount) {
+                return res.status(400).json("Return Amount exceeded recieved amount");
+            }
+
+            if (customerAccount.receivedAmount === customerAccount.returnAmount) {
+                customerAccount.cosPaymentStatus = "Fully Paid"
+            }
+
+          
+            await customerAccount.save();
+  
+            return res.status(200).json({ message: 'Transaction processed successfully' });
+          } else {
+            const pendingTransaction = {
+              amount: parseFloat(returnAmount),
+              paymentMethod: selectedBank ? sendedPaymentMethodWithBank : paymentMethod,
+              sendedTo: customerAccount.customerName,
+              type: 'Sent',
+              proof: paymentProof,
+              sendedFrom : sendedBy,
+              requestedBy : staffAccount,
+              approved: false
+            };
+        
+            existingStaffAccount.pendingApprovals.push(pendingTransaction);
+            await existingStaffAccount.save();
+
+            customerAccount.accountHistory.push({
+              officeCharges,
+              returnAmount,
+              paymentMethod,
+              sendedBy: selectedBank ? senderWithBank : sendedBy,
+              paymentProof,
+              staffAccount,
+              date: Date.now(),
+              approved : false,
+              pendingStaffId : existingStaffAccount.pendingApprovals[existingStaffAccount.pendingApprovals.length - 1]._id
+            });
+            
+
+            if (receivedAfterOfficeCharges < parseFloat(returnAmount)) {
+                return res.status(400).json("Return Amount exceeded recieved amount");
+            } 
+            await customerAccount.save()
+            return res.status(200).json({ message: 'Transaction sent for approval' });
+          }
+        }
+        
+        
   
         res.status(200).json({ updatedHiring, updatedCustomerAccount });
       } else if (option === 'replace') {
@@ -291,30 +418,14 @@ exports.listMaidAgain = async (req, res) => {
         }
 
         customerAccount.profileHiringStatus = 'Replaced';
-        customerAccount.accountHistory.push({
-          officeCharges,
-          returnAmount,
-          receivedAmount : receivedAmount || 0,
-          paymentMethod,
-          receivedBy : selectedBank ? receiverWithBank : receivedBy,
-          sendedBy : selectedBank ? senderWithBank : sendedBy,
-          paymentProof,
-          staffAccount,
-          date: Date.now(),
-        });
+       
 
-        const receivedAfterOfficeCharges = customerAccount.receivedAmount - parseFloat(officeCharges);        
-        customerAccount.receivedAmount = receivedAfterOfficeCharges >= 0 ? receivedAfterOfficeCharges : 0;
+        const receivedAfterOfficeCharges = customerAccount.receivedAmount - parseFloat(officeCharges);
+        customerAccount.receivedAmount = receivedAfterOfficeCharges ? receivedAfterOfficeCharges : 0;
 
         const balance = newMaidPrice >= customerAccount.receivedAmount;
+        customerAccount.totalAmount = newMaidPrice;
 
-        if (balance) {
-          customerAccount.totalAmount = newMaidPrice;
-          receivedAmount ? customerAccount.receivedAmount += parseFloat(receivedAmount) : "";
-        } else {
-          customerAccount.totalAmount = newMaidPrice;
-          returnAmount ? customerAccount.returnAmount += parseFloat(returnAmount) : "";
-        }
 
         if (customerAccount.receivedAmount === customerAccount.totalAmount) {
             customerAccount.cosPaymentStatus = "Fully Paid"
@@ -355,45 +466,177 @@ exports.listMaidAgain = async (req, res) => {
         const savedNewHiring = await newHiring.save();
   
         newMaid.isHired = true;
-
-        if (receivedBy) {
-          const existingStaffAccount = await StaffAccount.findOne({staffName : receivedBy});
-          if (!existingStaffAccount) {
-            return res.status(400).json({ error: 'Staff account not found' });
-          }
-    
-          existingStaffAccount.balance += receivedAmount;
-          existingStaffAccount.totalReceivedAmount += receivedAmount;
-          existingStaffAccount.accountHistory.push({
-            amount: receivedAmount,
-            paymentMethod : selectedBank ? receivedPaymentMethodWithBank : paymentMethod,
-            receivedFrom: customerAccount.customerName,
-            type: 'Received',
-            proof: paymentProof,
-          });
-    
-          await existingStaffAccount.save();
-        } else if (sendedBy) {
-          const existingStaffAccount = await StaffAccount.findOne({staffName : sendedBy});
-          if (!existingStaffAccount) {
-            return res.status(400).json({ error: 'Staff account not found' });
-          }
-    
-          existingStaffAccount.balance -= returnAmount;
-          existingStaffAccount.totalSentAmount += returnAmount;
-          existingStaffAccount.accountHistory.push({
-            amount: returnAmount,
-            paymentMethod : selectedBank ? sendedPaymentMethodWithBank : paymentMethod,
-            sendedTo: customerAccount.customerName,
-            type: 'Sent',
-            proof: paymentProof,
-          });
-    
-          await existingStaffAccount.save();
-        }
-
         await newMaid.save();
+
+
+         if (receivedBy) {
+          const existingStaffAccount = await StaffAccount.findOne({ staffName: receivedBy });
+          if (!existingStaffAccount) {
+            return res.status(400).json({ error: 'Staff account not found' });
+          }
+        
+          if (req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)) {
+            existingStaffAccount.balance += parseFloat(receivedAmount);
+            existingStaffAccount.totalReceivedAmount += parseFloat(receivedAmount);
+
+            customerAccount.accountHistory.push({
+              officeCharges,
+              receivedAmount,
+              paymentMethod,
+              receivedBy: selectedBank ? receiverWithBank : receivedBy,
+              paymentProof,
+              staffAccount,
+              date: Date.now(),
+              approved : true
+            });
+
+            customerAccount.receivedAmount = receivedAfterOfficeCharges >= 0 ? receivedAfterOfficeCharges : 0;
+
+            if (balance) {
+              receivedAmount ? customerAccount.receivedAmount += parseFloat(receivedAmount) : "";
+            } else {
+              returnAmount ? customerAccount.returnAmount += parseFloat(returnAmount) : "";
+            }
+
+            if (customerAccount.receivedAmount < customerAccount.returnAmount) {
+                return res.status(400).json("Return Amount exceeded recieved amount");
+            }
+
+            if (customerAccount.receivedAmount === customerAccount.returnAmount) {
+                customerAccount.cosPaymentStatus = "Fully Paid"
+            }
+
+            existingStaffAccount.accountHistory.push({
+              amount: parseFloat(receivedAmount),
+              paymentMethod: selectedBank ? receivedPaymentMethodWithBank : paymentMethod,
+              receivedFrom: customerAccount.customerName,
+              type: 'Received',
+              proof: paymentProof,
+              approved: true 
+            });
+        
+            await existingStaffAccount.save();
+            await customerAccount.save();
+            return res.status(200).json({ message: 'Transaction processed successfully' });
+          } else {
+            const pendingTransaction = {
+              amount: parseFloat(receivedAmount),
+              paymentMethod: selectedBank ? receivedPaymentMethodWithBank : paymentMethod,
+              receivedFrom: customerAccount.customerName,
+              type: 'Received',
+              proof: paymentProof,
+              receivedBy,
+              requestedBy : StaffAccount,
+              approved: false
+            };
+            existingStaffAccount.pendingApprovals.push(pendingTransaction);
+            await existingStaffAccount.save();
+
+            customerAccount.accountHistory.push({
+              officeCharges,
+              receivedAmount,
+              paymentMethod,
+              sendedBy: selectedBank ? senderWithBank : sendedBy,
+              paymentProof,
+              staffAccount,
+              date: Date.now(),
+              approved : false,
+              pendingStaffId : existingStaffAccount.pendingApprovals[existingStaffAccount.pendingApprovals.length - 1]._id
+            });
+            
+
+            if (receivedAfterOfficeCharges < parseFloat(returnAmount)) {
+                return res.status(400).json("Return Amount exceeded recieved amount");
+            } 
+            await customerAccount.save()
+            return res.status(200).json({ message: 'Transaction sent for approval' });
+          }
+        } else if (sendedBy) {
+          const existingStaffAccount = await StaffAccount.findOne({ staffName: sendedBy });
+          if (!existingStaffAccount) {
+            return res.status(400).json({ error: 'Staff account not found' });
+          }
+        
+          if (req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)) {
+            existingStaffAccount.balance -= parseFloat(returnAmount);
+            existingStaffAccount.totalSentAmount += parseFloat(returnAmount);
+            existingStaffAccount.accountHistory.push({
+              amount: parseFloat(returnAmount),
+              paymentMethod: selectedBank ? sendedPaymentMethodWithBank : paymentMethod,
+              sendedTo: customerAccount.customerName,
+              type: 'Sent',
+              proof: paymentProof,
+              approved: true 
+            });
+
+            await existingStaffAccount.save();
+
+            customerAccount.accountHistory.push({
+              officeCharges,
+              returnAmount,
+              paymentMethod,
+              sendedBy: selectedBank ? senderWithBank : sendedBy,
+              paymentProof,
+              staffAccount,
+              date: Date.now(),
+              approved : true
+            });
+
+            if (balance) {
+              receivedAmount ? customerAccount.receivedAmount += parseFloat(receivedAmount) : "";
+            } else {
+              returnAmount ? customerAccount.returnAmount += parseFloat(returnAmount) : "";
+            }
+
+            if (customerAccount.receivedAmount < customerAccount.returnAmount) {
+                return res.status(400).json("Return Amount exceeded recieved amount");
+            }
+
+            if (customerAccount.receivedAmount === customerAccount.returnAmount) {
+                customerAccount.cosPaymentStatus = "Fully Paid"
+            }
+
+          
+            await customerAccount.save();
   
+            return res.status(200).json({ message: 'Transaction processed successfully' });
+          } else {
+            const pendingTransaction = {
+              amount: parseFloat(returnAmount),
+              paymentMethod: selectedBank ? sendedPaymentMethodWithBank : paymentMethod,
+              sendedTo: customerAccount.customerName,
+              type: 'Sent',
+              sendedBy,
+              requestedBy: staffAccount,
+              proof: paymentProof,
+              approved: false
+            };
+        
+            existingStaffAccount.pendingApprovals.push(pendingTransaction);
+            await existingStaffAccount.save();
+
+            customerAccount.accountHistory.push({
+              officeCharges,
+              returnAmount,
+              paymentMethod,
+              sendedBy: selectedBank ? senderWithBank : sendedBy,
+              paymentProof,
+              staffAccount,
+              date: Date.now(),
+              approved : false,
+              pendingStaffId : existingStaffAccount.pendingApprovals[existingStaffAccount.pendingApprovals.length - 1]._id
+            });
+            
+
+            if (receivedAfterOfficeCharges < parseFloat(returnAmount)) {
+                return res.status(400).json("Return Amount exceeded recieved amount");
+            } 
+            await customerAccount.save()
+            return res.status(200).json({ message: 'Transaction sent for approval' });
+          }
+        }
+        
+
         res.status(201).json({ updatedOldHiring, updatedCustomerAccount, savedNewHiring });
       } else {
         return res.status(400).json({ error: 'Invalid option' });
@@ -612,43 +855,83 @@ exports.updateHiringAndPaymentById = async (req, res) => {
         return res.status(404).json({ error: 'Customer account not found' });
       }
   
-      customerAccount.receivedAmount += parseFloat(updatedReceivedAmount);
-      if (existingHiring.totalAmount === customerAccount.receivedAmount) {
-        customerAccount.cosPaymentStatus = 'Fully Paid';
-      } else {
-        customerAccount.cosPaymentStatus = 'Partially Paid';
-      }
-  
-      const newAccountHistoryItem = {
-        receivedAmount: updatedReceivedAmount,
-        receivedBy: newPayment.receivedBy,
-        paymentMethod: newPayment.paymentMethod,
-        date: newPayment.timestamp,
-        staffAccount : updatedPaymentData.staffAccount,
-        paymentProof: newPayment.paySlip,
-      };
-  
-      customerAccount.accountHistory.push(newAccountHistoryItem);
-  
-
       if (newPayment.receivedBy) {
-        const existingStaffAccount = await StaffAccount.findOne({staffName : updatedPaymentData.receivedBy});
+        const existingStaffAccount = await StaffAccount.findOne({ staffName: updatedPaymentData.receivedBy });
         if (!existingStaffAccount) {
           return res.status(400).json({ error: 'Staff account not found' });
         }
-  
-        existingStaffAccount.balance += updatedReceivedAmount;
-        existingStaffAccount.totalReceivedAmount += updatedReceivedAmount;
-        existingStaffAccount.accountHistory.push({
-          amount: updatedReceivedAmount,
-          paymentMethod : updatedPaymentData.selectedBank ? `${updatedPaymentData.paymentMethod} (${updatedPaymentData.selectedBank})` : updatedPaymentData.paymentMethod,
-          receivedFrom: customerAccount.customerName,
-          type: 'Received',
-          proof: newPayment.paySlip,
-        });
-  
-        await existingStaffAccount.save();
+      
+        if (req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)) {
+          existingStaffAccount.balance += updatedReceivedAmount;
+          existingStaffAccount.totalReceivedAmount += updatedReceivedAmount;
+          existingStaffAccount.accountHistory.push({
+            amount: updatedReceivedAmount,
+            paymentMethod: updatedPaymentData.selectedBank ? `${updatedPaymentData.paymentMethod} (${updatedPaymentData.selectedBank})` : updatedPaymentData.paymentMethod,
+            receivedFrom: customerAccount.customerName,
+            type: 'Received',
+            proof: newPayment.paySlip,
+            approved: true
+          });
+      
+          await existingStaffAccount.save();
+
+          customerAccount.receivedAmount += parseFloat(updatedReceivedAmount);
+          if (existingHiring.totalAmount === customerAccount.receivedAmount) {
+            customerAccount.cosPaymentStatus = 'Fully Paid';
+          } else {
+            customerAccount.cosPaymentStatus = 'Partially Paid';
+          }
+
+          const newAccountHistoryItem = {
+            receivedAmount: updatedReceivedAmount,
+            receivedBy: newPayment.receivedBy,
+            paymentMethod: newPayment.paymentMethod,
+            date: newPayment.timestamp,
+            staffAccount : updatedPaymentData.staffAccount,
+            paymentProof: newPayment.paySlip,
+            approved : true
+          };
+      
+          customerAccount.accountHistory.push(newAccountHistoryItem);
+      
+          await customerAccount.save()
+
+          return res.status(200).json({ message: 'Transaction processed successfully' });
+        } else {
+          const pendingTransaction = {
+            amount: updatedReceivedAmount,
+            paymentMethod: updatedPaymentData.selectedBank ? `${updatedPaymentData.paymentMethod} (${updatedPaymentData.selectedBank})` : updatedPaymentData.paymentMethod,
+            receivedFrom: customerAccount.customerName,
+            type: 'Received',
+            receivedBy : newPayment.receivedBy,
+            requestedBy : updatedPaymentData.staffAccount,
+            proof: newPayment.paySlip,
+            approved: false
+          };
+      
+          existingStaffAccount.pendingApprovals.push(pendingTransaction);
+          await existingStaffAccount.save();
+
+
+          const newAccountHistoryItem = {
+            receivedAmount: updatedReceivedAmount,
+            receivedBy: newPayment.receivedBy,
+            paymentMethod: newPayment.paymentMethod,
+            date: newPayment.timestamp,
+            staffAccount : updatedPaymentData.staffAccount,
+            paymentProof: newPayment.paySlip,
+            pendingStaffId : existingStaffAccount.pendingApprovals[existingStaffAccount.pendingApprovals.length - 1]._id,
+            approved : false
+          };
+      
+          customerAccount.accountHistory.push(newAccountHistoryItem);
+      
+      
+          await customerAccount.save()
+          return res.status(200).json({ message: 'Transaction sent for approval' });
+        }
       }
+      
 
       const savedCustomerAccount = await customerAccount.save();
   
@@ -689,33 +972,6 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
         const updatedRturnAmount = parseFloat(paymentData.amountReturnToCustomer) || 0;
         const newReceivedAmount = customerAccount.receivedAmount + updatedReceivedAmount;
         
-        if(paymentData.amountReturnToCustomer && parseFloat(paymentData.amountReturnToCustomer) > 0) {
-          customerAccount.receivedAmount -= parseFloat(paymentData.amountReturnToCustomer);
-          customerAccount.returnAmount > 0 ? customerAccount.returnAmount += parseFloat(paymentData.amountReturnToCustomer) : customerAccount.returnAmount = parseFloat(paymentData.amountReturnToCustomer) 
-        }else{
-          customerAccount.receivedAmount = newReceivedAmount;
-        }
-
-        if (newReceivedAmount > customerAccount.totalAmount && !paymentData.amountReturnToCustomer) {
-          return res.status(400).json({ error: 'Received amount cannot exceed total amount' });
-        }
-    
-        customerAccount.cosPaymentStatus = newReceivedAmount === customerAccount.totalAmount ? 'Fully Paid' : 'Partially Paid';
-    
-        const newAccountHistoryItem = {
-          receivedAmount: paymentData.amountGivenByCustomer && updatedReceivedAmount,
-          returnAmount : paymentData.amountReturnToCustomer && updatedRturnAmount ,
-          receivedBy: paymentData.amountGivenByCustomer && paymentData.selectedBank ? `${paymentData.receivedBy} (${paymentData.selectedBank})` : paymentData.receivedBy,
-          sendedBy: paymentData.amountReturnToCustomer && paymentData.selectedBank ? `${paymentData.sendedBy} (${paymentData.selectedBank})` : paymentData.sendedBy,
-          paymentMethod: paymentData.paymentMethod,
-          paymentProof : paySlip,
-          staffAccount: paymentData.staffAccount,
-          date: Date.now(),
-        };
-        customerAccount.accountHistory.push(newAccountHistoryItem);
-    
-        const savedCustomerAccount = await customerAccount.save();
-    
           const latestHiring = await Hiring.findOne({ maidId : customerAccount.profileId })
           .sort({ timestamp: -1 }).limit(1);
   
@@ -731,12 +987,24 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
           await latestHiring.save();
           }
     
-          if (newAccountHistoryItem.receivedBy) {
-            const existingStaffAccount = await StaffAccount.findOne({staffName : paymentData.receivedBy});
-            if (!existingStaffAccount) {
-              return res.status(400).json({ error: 'Staff account not found' });
-            }
-      
+          if (paymentData.amountGivenByCustomer) {
+          const existingStaffAccount = await StaffAccount.findOne({ staffName: paymentData.receivedBy });
+          if (!existingStaffAccount) {
+            return res.status(400).json({ error: 'Staff account not found' });
+          }
+          const newAccountHistoryItem = {
+            receivedAmount: paymentData.amountGivenByCustomer && updatedReceivedAmount,
+            returnAmount : paymentData.amountReturnToCustomer && updatedRturnAmount ,
+            receivedBy: paymentData.amountGivenByCustomer && paymentData.selectedBank ? `${paymentData.receivedBy} (${paymentData.selectedBank})` : paymentData.receivedBy,
+            sendedBy: paymentData.amountReturnToCustomer && paymentData.selectedBank ? `${paymentData.sendedBy} (${paymentData.selectedBank})` : paymentData.sendedBy,
+            paymentMethod: paymentData.paymentMethod,
+            paymentProof : paySlip,
+            staffAccount: paymentData.staffAccount,
+            date: Date.now(),
+            approved : true
+          };
+
+          if (req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)) {
             existingStaffAccount.balance += newAccountHistoryItem.receivedAmount;
             existingStaffAccount.totalReceivedAmount += newAccountHistoryItem.receivedAmount;
             existingStaffAccount.accountHistory.push({
@@ -745,27 +1013,145 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
               receivedFrom: customerAccount.customerName,
               type: 'Received',
               proof: paySlip,
+              approved: true
             });
-      
+
             await existingStaffAccount.save();
-          } else if (newAccountHistoryItem.sendedBy) {
-            const existingStaffAccount = await StaffAccount.findOne({staffName : paymentData.sendedBy});
+
+            if(paymentData.amountReturnToCustomer && parseFloat(paymentData.amountReturnToCustomer) > 0) {
+              customerAccount.receivedAmount -= parseFloat(paymentData.amountReturnToCustomer);
+              customerAccount.returnAmount > 0 ? customerAccount.returnAmount += parseFloat(paymentData.amountReturnToCustomer) : customerAccount.returnAmount = parseFloat(paymentData.amountReturnToCustomer) 
+            }else{
+              customerAccount.receivedAmount = newReceivedAmount;
+            }
+    
+            if (newReceivedAmount > customerAccount.totalAmount && !paymentData.amountReturnToCustomer) {
+              return res.status(400).json({ error: 'Received amount cannot exceed total amount' });
+            }
+        
+            customerAccount.cosPaymentStatus = newReceivedAmount === customerAccount.totalAmount ? 'Fully Paid' : 'Partially Paid';
+        
+            customerAccount.accountHistory.push(newAccountHistoryItem);
+        
+            await customerAccount.save();
+
+
+            return res.status(200).json({ message: 'Transaction processed successfully' });
+          } else {
+            const pendingTransaction = {
+              amount: newAccountHistoryItem.receivedAmount,
+              paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
+              receivedFrom: customerAccount.customerName,
+              type: 'Received',
+              receivedBy : paymentData.receivedBy,
+              requestedBy : paymentData.staffAccount,
+              proof: paySlip,
+              approved: false
+            };
+
+            existingStaffAccount.pendingApprovals.push(pendingTransaction);
+            await existingStaffAccount.save();
+            
+            const newAccountHistoryForApprovalItem = {
+              receivedAmount: paymentData.amountGivenByCustomer && updatedReceivedAmount,
+              returnAmount : paymentData.amountReturnToCustomer && updatedRturnAmount ,
+              receivedBy: paymentData.amountGivenByCustomer && paymentData.selectedBank ? `${paymentData.receivedBy} (${paymentData.selectedBank})` : paymentData.receivedBy,
+              sendedBy: paymentData.amountReturnToCustomer && paymentData.selectedBank ? `${paymentData.sendedBy} (${paymentData.selectedBank})` : paymentData.sendedBy,
+              paymentMethod: paymentData.paymentMethod,
+              paymentProof : paySlip,
+              staffAccount: paymentData.staffAccount,
+              date: Date.now(),
+              approved : false,
+              pendingStaffId : existingStaffAccount.pendingApprovals[existingStaffAccount.pendingApprovals.length - 1]._id,
+            };
+            customerAccount.accountHistory.push(newAccountHistoryForApprovalItem);
+        
+            await customerAccount.save();
+
+            return res.status(200).json({ message: 'Transaction sent for approval' });
+          }
+          } else if (paymentData.amountReturnToCustomer) {
+            const existingStaffAccount = await StaffAccount.findOne({ staffName: paymentData.sendedBy });
             if (!existingStaffAccount) {
               return res.status(400).json({ error: 'Staff account not found' });
             }
-      
-            existingStaffAccount.balance -= newAccountHistoryItem.returnAmount;
-            existingStaffAccount.totalSentAmount += newAccountHistoryItem.returnAmount;
-            existingStaffAccount.accountHistory.push({
-              amount: newAccountHistoryItem.returnAmount,
-              paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
-              sendedTo: customerAccount.customerName,
-              type: 'Sent',
-              proof: paySlip,
-            });
-            await existingStaffAccount.save();
-          }
+            const newAccountHistoryItem = {
+              receivedAmount: paymentData.amountGivenByCustomer && updatedReceivedAmount,
+              returnAmount : paymentData.amountReturnToCustomer && updatedRturnAmount ,
+              receivedBy: paymentData.amountGivenByCustomer && paymentData.selectedBank ? `${paymentData.receivedBy} (${paymentData.selectedBank})` : paymentData.receivedBy,
+              sendedBy: paymentData.amountReturnToCustomer && paymentData.selectedBank ? `${paymentData.sendedBy} (${paymentData.selectedBank})` : paymentData.sendedBy,
+              paymentMethod: paymentData.paymentMethod,
+              paymentProof : paySlip,
+              staffAccount: paymentData.staffAccount,
+              date: Date.now(),
+              approved : true
+            };
+            if (req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)) {
+              existingStaffAccount.balance -= newAccountHistoryItem.returnAmount;
+              existingStaffAccount.totalSentAmount += newAccountHistoryItem.returnAmount;
+              existingStaffAccount.accountHistory.push({
+                amount: newAccountHistoryItem.returnAmount,
+                paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
+                sendedTo: customerAccount.customerName,
+                type: 'Sent',
+                proof: paySlip,
+                approved: true
+              });
 
+              await existingStaffAccount.save();
+
+              if(paymentData.amountReturnToCustomer && parseFloat(paymentData.amountReturnToCustomer) > 0) {
+                customerAccount.receivedAmount -= parseFloat(paymentData.amountReturnToCustomer);
+                customerAccount.returnAmount > 0 ? customerAccount.returnAmount += parseFloat(paymentData.amountReturnToCustomer) : customerAccount.returnAmount = parseFloat(paymentData.amountReturnToCustomer) 
+              }else{
+                customerAccount.receivedAmount = newReceivedAmount;
+              }
+      
+              if (newReceivedAmount > customerAccount.totalAmount && !paymentData.amountReturnToCustomer) {
+                return res.status(400).json({ error: 'Received amount cannot exceed total amount' });
+              }
+          
+              customerAccount.cosPaymentStatus = newReceivedAmount === customerAccount.totalAmount ? 'Fully Paid' : 'Partially Paid';
+          
+              customerAccount.accountHistory.push(newAccountHistoryItem);
+          
+              await customerAccount.save();
+
+
+              return res.status(200).json({ message: 'Transaction processed successfully' });
+            } else {
+              const pendingTransaction = {
+                amount: newAccountHistoryItem.returnAmount,
+                paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
+                sendedTo: customerAccount.customerName,
+                type: 'Sent',
+                proof: paySlip,
+                sendedBy : paymentData.sendedBy,
+                requestedBy: paymentData.staffAccount,
+                approved: false
+              };
+
+              existingStaffAccount.pendingApprovals.push(pendingTransaction);
+              await existingStaffAccount.save();
+
+              const newAccountHistoryForApprovalItem = {
+                receivedAmount: paymentData.amountGivenByCustomer && updatedReceivedAmount,
+                returnAmount : paymentData.amountReturnToCustomer && updatedRturnAmount ,
+                receivedBy: paymentData.amountGivenByCustomer && paymentData.selectedBank ? `${paymentData.receivedBy} (${paymentData.selectedBank})` : paymentData.receivedBy,
+                sendedBy: paymentData.amountReturnToCustomer && paymentData.selectedBank ? `${paymentData.sendedBy} (${paymentData.selectedBank})` : paymentData.sendedBy,
+                paymentMethod: paymentData.paymentMethod,
+                paymentProof : paySlip,
+                staffAccount: paymentData.staffAccount,
+                date: Date.now(),
+                approved : false,
+                pendingStaffId : existingStaffAccount.pendingApprovals[existingStaffAccount.pendingApprovals.length - 1]._id,
+              };
+              customerAccount.accountHistory.push(newAccountHistoryForApprovalItem);
+          
+              await customerAccount.save();
+              return res.status(200).json({ message: 'Transaction sent for approval' });
+            }
+          }
 
         res.status(200).json({ message: 'Payment updated successfully', savedCustomerAccount });
       } else {
@@ -779,8 +1165,7 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
           return res.status(400).json({ error: 'Received amount cannot exceed recieved amount' });
         }
     
-        customerAccount.cosPaymentStatus = newReturnAmount === customerAccount.receivedAmount ? 'Fully Paid' : 'Partially Paid';
-        customerAccount.returnAmount = newReturnAmount;
+        
         const newAccountHistoryItem = {
           returnAmount: updatedReturnAmount,
           sendedBy: paymentData.selectedBank ? `${paymentData.sendedBy} (${paymentData.selectedBank})` : paymentData.sendedBy,
@@ -788,48 +1173,129 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
           paymentProof : paySlip,
           staffAccount: paymentData.staffAccount,
           date: Date.now(),
+          approved: true,
         };
         
-        customerAccount.accountHistory.push(newAccountHistoryItem);
     
-        const savedCustomerAccount = await customerAccount.save();
+        await customerAccount.save();
+
+
         if (newAccountHistoryItem.receivedAmount) {
-          const existingStaffAccount = await StaffAccount.findOne({staffName : paymentData.receivedBy});
+          const existingStaffAccount = await StaffAccount.findOne({ staffName: paymentData.receivedBy });
           if (!existingStaffAccount) {
             return res.status(400).json({ error: 'Staff account not found' });
           }
-    
-          existingStaffAccount.balance += newAccountHistoryItem.receivedAmount;
-          existingStaffAccount.totalReceivedAmount += newAccountHistoryItem.receivedAmount;
-          existingStaffAccount.accountHistory.push({
-            amount: newAccountHistoryItem.receivedAmount,
-            receivedFrom: customerAccount.customerName,
-            paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
-            type: 'Received',
-            proof: paySlip,
-          });
-    
-          await existingStaffAccount.save();
-        } else if (newAccountHistoryItem.sendedBy) {
-          const existingStaffAccount = await StaffAccount.findOne({staffName : paymentData.sendedBy});
+        
+          if (existingStaffAccount.staffRoles && existingStaffAccount.staffRoles.includes(roles.fullAccessOnAccounts)) {
+            existingStaffAccount.balance += newAccountHistoryItem.receivedAmount;
+            existingStaffAccount.totalReceivedAmount += newAccountHistoryItem.receivedAmount;
+            existingStaffAccount.accountHistory.push({
+              amount: newAccountHistoryItem.receivedAmount,
+              receivedFrom: customerAccount.customerName,
+              paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
+              type: 'Received',
+              proof: paySlip,
+              approved: true
+            });
+        
+            await existingStaffAccount.save();
+
+            customerAccount.cosPaymentStatus = newReturnAmount === customerAccount.receivedAmount ? 'Fully Paid' : 'Partially Paid';
+            customerAccount.returnAmount = newReturnAmount;
+            customerAccount.accountHistory.push(newAccountHistoryItem);
+
+            await customerAccount.save()
+            return res.status(200).json({ message: 'Transaction processed successfully' });
+          } else {
+            const pendingTransaction = {
+              amount: newAccountHistoryItem.receivedAmount,
+              receivedFrom: customerAccount.customerName,
+              paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
+              type: 'Received',
+              receivedBy : paymentData.receivedBy,
+              requestedBy: paymentData.staffAccount,
+              proof: paySlip,
+              approved: false
+            };
+        
+            existingStaffAccount.pendingApprovals.push(pendingTransaction);
+            await existingStaffAccount.save();
+
+            const newAccountHistoryForApprovalItem = {
+              receivedAmount: paymentData.amountGivenByCustomer && updatedReceivedAmount,
+              receivedBy: paymentData.amountGivenByCustomer && paymentData.selectedBank ? `${paymentData.receivedBy} (${paymentData.selectedBank})` : paymentData.receivedBy,
+              paymentMethod: paymentData.paymentMethod,
+              paymentProof : paySlip,
+              staffAccount: paymentData.staffAccount,
+              date: Date.now(),
+              approved : false,
+              pendingStaffId : existingStaffAccount.pendingApprovals[existingStaffAccount.pendingApprovals.length - 1]._id,
+            };
+            customerAccount.accountHistory.push(newAccountHistoryForApprovalItem);
+        
+            await customerAccount.save();
+            return res.status(200).json({ message: 'Transaction sent for approval' });
+          }
+        } else if (newAccountHistoryItem.returnAmount) {
+          const existingStaffAccount = await StaffAccount.findOne({ staffName: paymentData.sendedBy });
           if (!existingStaffAccount) {
             return res.status(400).json({ error: 'Staff account not found' });
           }
-    
-          existingStaffAccount.balance -= newAccountHistoryItem.returnAmount;
-          existingStaffAccount.totalSentAmount += newAccountHistoryItem.returnAmount;
-          existingStaffAccount.accountHistory.push({
-            amount: newAccountHistoryItem.returnAmount,
-            paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
-            sendedTo: customerAccount.customerName,
-            type: 'Sent',
-            proof: paySlip,
-          });
-    
-          await existingStaffAccount.save();
+        
+          if (existingStaffAccount.staffRoles && existingStaffAccount.staffRoles.includes(roles.fullAccessOnAccounts)) {
+            existingStaffAccount.balance -= newAccountHistoryItem.returnAmount;
+            existingStaffAccount.totalSentAmount += newAccountHistoryItem.returnAmount;
+            existingStaffAccount.accountHistory.push({
+              amount: newAccountHistoryItem.returnAmount,
+              paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
+              sendedTo: customerAccount.customerName,
+              type: 'Sent',
+              proof: paySlip,
+              approved: true
+            });
+        
+            await existingStaffAccount.save();
+            customerAccount.cosPaymentStatus = newReturnAmount === customerAccount.receivedAmount ? 'Fully Paid' : 'Partially Paid';
+            customerAccount.returnAmount = newReturnAmount;
+            customerAccount.accountHistory.push(newAccountHistoryItem);
+
+            await customerAccount.save()
+            return res.status(200).json({ message: 'Transaction processed successfully' });
+          } else {
+            const pendingTransaction = {
+              amount: newAccountHistoryItem.returnAmount,
+              paymentMethod: paymentData.selectedBank ? `${paymentData.paymentMethod} (${paymentData.selectedBank})` : paymentData.paymentMethod,
+              sendedTo: customerAccount.customerName,
+              type: 'Sent',
+              proof: paySlip,
+              sendedFrom : paymentData.sendedBy,
+              requestedBy: paymentData.staffAccount,
+              approved: false
+            };
+        
+            existingStaffAccount.pendingApprovals.push(pendingTransaction);
+            await existingStaffAccount.save();
+
+
+            const newAccountHistoryForApprovalItem = {
+              returnAmount: paymentData.amountReturnToCustomer && updatedReturnAmount,
+              sendedBy: paymentData.amountReturnToCustomer && paymentData.selectedBank ? `${paymentData.sendedBy} (${paymentData.selectedBank})` : paymentData.sendedBy,
+              paymentMethod: paymentData.paymentMethod,
+              paymentProof : paySlip,
+              staffAccount: paymentData.staffAccount,
+              date: Date.now(),
+              approved : false,
+              pendingStaffId : existingStaffAccount.pendingApprovals[existingStaffAccount.pendingApprovals.length - 1]._id,
+            };
+            customerAccount.accountHistory.push(newAccountHistoryForApprovalItem);
+        
+            await customerAccount.save();
+            return res.status(200).json({ message: 'Transaction sent for approval' });
+          }
         }
+        
     
-        res.status(200).json({ message: 'Payment updated successfully', savedCustomerAccount });
+        res.status(200).json({ message: 'Payment updated successfully' });
       }
       
     } catch (error) {

@@ -6,6 +6,7 @@ const UpdatePaymentHistorySchema = new mongoose.Schema({
   receivedAmoount: Number,
   receivedBy:String,
   paySlip:String,
+  approved: { type: Boolean, default: false },
   timestamp: { type: Date, default: Date.now }
 });
 

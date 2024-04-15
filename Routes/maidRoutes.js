@@ -44,9 +44,3 @@ router.put('/hiring/edit/:id', verifyStaffToken, checkPermission(roles.canAccess
 router.get('/maid-history/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts),  maidController.getMaidHistory)
 
 module.exports = router;
-
-// {
-//   "amountGivenByCustomer": 200,
-//   "paymentMethod":"Bank Transfer",
-//   "receivedBy":"Leena"
-// }

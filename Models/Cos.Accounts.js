@@ -1,15 +1,17 @@
 const mongoose = require('mongoose');
 
 const accountHistorySchema = new mongoose.Schema({
-  receivedAmount: { type: Number},
+  receivedAmount: { type: Number, default: 0},
   officeCharges:{ type: Number },
-  returnAmount: { type: Number},
+  returnAmount: { type: Number, default: 0},
   receivedBy: { type: String, required: false },
   sendedBy: { type: String },
   paymentMethod: { type: String, required: true },
   date: { type: Date, default: Date.now },
   paymentProof: { type: String, required : true },
+  approved: { type: Boolean, default: false },
   staffAccount : String,
+  pendingStaffId : String,
 });
 
 const customerAccountSchema = new mongoose.Schema({
@@ -21,7 +23,7 @@ const customerAccountSchema = new mongoose.Schema({
   profileCode: { type: String, required: true },
   totalAmount: { type: Number, default: 0 },
   receivedAmount: { type: Number, default: 0 },
-  returnAmount: { type: Number},
+  returnAmount: { type: Number,  default: 0},
   uniqueCode: { type: String, required: true },
   profileHiringStatus: { type: String, enum: ['Hired', 'Replaced', 'Return'], default: 'Hired' },
   cosPaymentStatus: { type: String, enum: ['Fully Paid', 'Partially Paid'], default: 'Partially Paid' },
