@@ -4,7 +4,7 @@ const maidController = require("../controllers/maidController")
 const upload = require("../middlewears/uploadMiddlewear")
 const verifyStaffToken = require("../middlewears/verifyStaffToken");
 const checkPermission = require("../middlewears/checkPermission")
-const roles = require("../config/roles")
+const roles = require("../config/roles");
 
 // CRUD
 router.get('/', maidController.getAllMaids);
@@ -42,5 +42,7 @@ router.post('/unHiring/:id', verifyStaffToken, checkPermission(roles.canAccessOn
 router.put('/hiring/update/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts),  upload.single('hiringSlip') ,  maidController.updateHiringById)
 router.put('/hiring/edit/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts), upload.single('hiringSlip'), maidController.editHiringById)
 router.get('/maid-history/:id', verifyStaffToken, checkPermission(roles.canAccessOnAccounts),  maidController.getMaidHistory)
+
+// router.post('/update-nationality-spelling', maidController.updateNationality);
 
 module.exports = router;

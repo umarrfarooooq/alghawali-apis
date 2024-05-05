@@ -282,6 +282,43 @@ exports.processPaymentRequest = async (req, res) => {
   }
 };
 
+exports.declinePaymentRequest = async (req, res) => {
+  try {
+    const { requestId } = req.body;
+
+    const staffAccount = await StaffAccount.findOne({ 'pendingApprovals._id': requestId });
+    const customerAccount = await CustomerAccount.findOne({ 'accountHistory.pendingStaffId': requestId });
+
+    if (!staffAccount) {
+      return res.status(404).json({ error: 'Pending approval not found' });
+    }
+
+    const pendingApproval = staffAccount.pendingApprovals.id(requestId);
+    if (!pendingApproval) {
+      return res.status(404).json({ error: 'Pending approval not found' });
+    }
+
+    staffAccount.pendingApprovals.remove(pendingApproval);
+    await staffAccount.save();
+
+    if (customerAccount) {
+      const historyToUpdate = customerAccount.accountHistory.find(history => history.pendingStaffId === requestId);
+      if (historyToUpdate) {
+        historyToUpdate.approved = false;
+        await customerAccount.save();
+      } else {
+        return res.status(404).json({ error: 'History not found in customer account' });
+      }
+    }
+
+    res.status(200).json({ message: 'Payment request declined successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'An error occurred while declining payment request' });
+  }
+};
+
+
 exports.getAllAccountsSummary = async (req, res) => {
   try {
     const allAccounts = await StaffAccount.find();
