@@ -3,6 +3,9 @@ const Hiring = require("../Models/HiringDetail");
 const CustomerAccount = require("../Models/Cos.Accounts");
 const StaffAccount = require("../Models/staffAccounts");
 const roles = require("../config/roles")
+const sharp = require('sharp');
+const { v4: uuidv4 } = require('uuid');
+const path = require("path");
 
 function generateUniqueCode() {
     const uniqueCodeLength = 6;
@@ -42,8 +45,11 @@ exports.createHiring = async (req, res) => {
       }
   
       if (req.file) {
-        hiringSlip = req.file.path;
-      }
+        const uniqueImageName = `${uuidv4()}_${req.file.filename}.webp`;
+        const compressedImagePath = `uploads/images/${uniqueImageName}`;
+        await sharp(req.file.path).resize({ width: 800 }).webp({ quality: 70 }).toFile(compressedImagePath);
+        hiringSlip = compressedImagePath;
+    }
       
       if(!hiringSlip) {
         return res.status(400).json({error: "Cannot proceed without payment proof"})
@@ -184,10 +190,13 @@ exports.listMaidAgain = async (req, res) => {
         senderWithBank = `${sendedBy} (${selectedBank})`;
         sendedPaymentMethodWithBank = `${paymentMethod} (${selectedBank})`;
       }
-  
       if (req.file) {
-        paymentProof = req.file.path;
-      }
+        const uniqueImageName = `${uuidv4()}_${req.file.filename}.webp`;
+        const compressedImagePath = `uploads/images/${uniqueImageName}`;
+        await sharp(req.file.path).resize({ width: 800 }).webp({ quality: 70 }).toFile(compressedImagePath);
+        paymentProof = compressedImagePath;
+    }
+      
       if (receivedAmount > 0 || returnAmount > 0 ) {
         if(!paymentProof){
           return res.status(400).json({ error: 'Payment Proof Is Necessery' });
@@ -820,9 +829,15 @@ exports.updateHiringAndPaymentById = async (req, res) => {
   
       let paySlip;
   
+
       if (req.file) {
-        paySlip = req.file.path;
-      }
+        const uniqueImageName = `${uuidv4()}_${req.file.filename}.webp`;
+        const compressedImagePath = `uploads/images/${uniqueImageName}`;
+        await sharp(req.file.path).resize({ width: 800 }).webp({ quality: 70 }).toFile(compressedImagePath);
+        paySlip = compressedImagePath;
+    }
+
+
       if(!paySlip) {
         return res.status(400).json({error: "Cannot proceed without payment proof"})
       }
@@ -953,9 +968,14 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
       }
       let paySlip;
   
+
       if (req.file) {
-        paySlip = req.file.path;
-      }
+        const uniqueImageName = `${uuidv4()}_${req.file.filename}.webp`;
+        const compressedImagePath = `uploads/images/${uniqueImageName}`;
+        await sharp(req.file.path).resize({ width: 800 }).webp({ quality: 70 }).toFile(compressedImagePath);
+        paySlip = compressedImagePath;
+    }
+
       if(!paySlip) {
         return res.status(400).json({error: "Cannot proceed without payment proof"})
       }
