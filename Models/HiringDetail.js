@@ -20,8 +20,7 @@ const hiringSchema = new mongoose.Schema({
     required: true
   },
   paymentMethod:{
-    type: String,
-    required: true
+    type: String
   },
   receivedBy:{
     type: String,
@@ -50,8 +49,7 @@ const hiringSchema = new mongoose.Schema({
     required: true
   },
   hiringSlip:{
-    type: String,
-    required: true
+    type: String
   },
   hiringBy:{
     type: String,

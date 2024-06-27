@@ -211,9 +211,9 @@ exports.listMaidAgain = async (req, res) => {
 
 
         hiringRecord.hiringStatus = false;
-        hiringRecord.returnAmount = returnAmount;
+        hiringRecord.returnAmount = returnAmount || 0;
         hiringRecord.officeCharges= officeCharges;
-        hiringRecord.paymentMethod = paymentMethod;
+        hiringRecord.paymentMethod = paymentMethod ? paymentMethod : "";
         hiringRecord.receivedBy = selectedBank ? receiverWithBank : receivedBy;
         hiringRecord.paymentProof = paymentProof;
         hiringRecord.unHiringReason = unHiringReason;
@@ -434,6 +434,7 @@ exports.listMaidAgain = async (req, res) => {
 
         const balance = newMaidPrice >= customerAccount.receivedAmount;
         customerAccount.totalAmount = newMaidPrice;
+
 
 
         if (customerAccount.receivedAmount === customerAccount.totalAmount) {
