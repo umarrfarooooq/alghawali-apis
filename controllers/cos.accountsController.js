@@ -1325,15 +1325,29 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
     }
   };
 
-exports.getAllAccounts = async (req, res) => {
+  exports.getAllAccounts = async (req, res) => {
     try {
-        const allAccounts = await CustomerAccount.find();
+        const { searchTerm } = req.query;
+        let query = {};
+
+        if (searchTerm) {
+            query = {
+                $or: [
+                    { profileCode: { $regex: searchTerm, $options: 'i' } },
+                    { customerName: { $regex: searchTerm, $options: 'i' } },
+                    { uniqueCode: { $regex: searchTerm, $options: 'i' } }
+                ]
+            };
+        }
+
+        const allAccounts = await CustomerAccount.find(query);
         res.status(200).json(allAccounts);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'An error occurred' });
     }
 };
+
 exports.getMyCustomerAccounts = async (req, res) => {
     try {
         const staffId = req.params.staffId;
