@@ -1,4 +1,4 @@
-name: Deploy to VPS
+name: Alghawali Apis Deploy
 
 on:
   push:
