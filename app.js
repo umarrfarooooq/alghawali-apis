@@ -81,6 +81,9 @@ app.use('/api/v1/staffAccounts', staffAccountsRoute);
 // Pages 
 app.use('/cv', cvRoute)
 
+app.get("/cicd", (req, res) => {
+  res.send("Hello CICD")
+})
 
 // const loginRoute = require("./Routes/auth.route")
 
