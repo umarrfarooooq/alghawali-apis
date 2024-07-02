@@ -92,6 +92,13 @@ const maidSchema = new mongoose.Schema({
       type: Boolean,
       default: false
     },
+    isMonthlyHired: {
+    type: Boolean,
+    default: false
+  },
+    monthlyHireEndDate: {
+      type: Date
+    },
     timestamp: { type: Date, default: Date.now }
   });
   

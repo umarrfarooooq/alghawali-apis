@@ -795,3 +795,34 @@ exports.getAllAccountSummary = async (req, res) => {
     res.status(500).json({ error: "An error occurred" });
   }
 };
+
+
+exports.resetAmounts = async (req, res) => {
+  try {
+    await StaffAccount.updateMany({}, {
+      $set: {
+        balance: 0,
+        totalReceivedAmount: 0,
+        totalSentAmount: 0,
+        transferHistory: [],
+        accountHistory: [],
+        pendingApprovals: []
+      }
+    });
+
+    res.status(200).json({ message: "Amounts reset successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "An error occurred while resetting amounts" });
+  }
+};
+exports.removeAllPendingRequests = async (req, res) => {
+  try {
+    await StaffAccount.updateMany({}, { $set: { pendingApprovals: [] } });
+
+    res.status(200).json({ message: "Pending requests removed successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "An error occurred while removing pending requests" });
+  }
+};

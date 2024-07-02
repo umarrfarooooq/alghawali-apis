@@ -26,11 +26,11 @@ exports.createHiring = async (req, res) => {
       if (!existingMaid) {
         return res.status(404).json({ error: 'Maid not found' });
       }
-      if (existingMaid.isHired) {
+      if (existingMaid.isHired || existingMaid.isMonthlyHired) {
         return res.status(400).json({ error: 'Maid already hired' });
-      }
+      }  
       
-      const { fullName, totalAmount, advanceAmount, cosPhone, hiringBy, paymentMethod, receivedBy, hiringDate, staffAccount, staffId } = req.body;
+      const { fullName, totalAmount, advanceAmount, cosPhone, hiringBy, paymentMethod, receivedBy, hiringDate, staffAccount, staffId, isMonthlyHiring, monthlyHiringDuration } = req.body;
       let hiringSlip;
       const selectedBank = req.body.selectedBank;
       do {
@@ -69,11 +69,21 @@ exports.createHiring = async (req, res) => {
         hiringStatus: true
       });
   
-  
-      if(!existingMaid.isHired){
-        existingMaid.isHired = true
-        await existingMaid.save();
+      let monthlyHireStartDate, monthlyHireEndDate;
+      if (isMonthlyHiring) {
+        if(!monthlyHiringDuration){
+          return res.status(400).json({ error: 'Please provide Hiring Duration' });
+        }
+        monthlyHireStartDate = new Date(hiringDate);
+        monthlyHireEndDate = new Date(hiringDate);
+        monthlyHireEndDate.setMonth(monthlyHireEndDate.getMonth() + parseFloat(monthlyHiringDuration));
+        
+        existingMaid.isMonthlyHired = true;
+        existingMaid.monthlyHireEndDate = monthlyHireEndDate;
+      } else {
+        existingMaid.isHired = true;
       }
+
       const newPayment = {
         paymentMethod,
         totalAmount,
@@ -93,19 +103,25 @@ exports.createHiring = async (req, res) => {
         staffId,
         profileName: existingMaid.name,
         profileId: existingMaid._id,
-        totalAmount : parseFloat(totalAmount),
+        totalAmount: parseFloat(totalAmount),
         profileCode: existingMaid.code,
         uniqueCode: uniqueCode,
-        profileHiringStatus: 'Hired',
+        profileHiringStatus: isMonthlyHiring ? 'MonthlyHired' : 'Hired',
+        isMonthlyHiring,
+        monthlyHiringDuration: isMonthlyHiring ? parseFloat(monthlyHiringDuration) : undefined,
+        monthlyHireStartDate: isMonthlyHiring ? monthlyHireStartDate : undefined,
+        monthlyHireEndDate: isMonthlyHiring ? monthlyHireEndDate : undefined,
         accountHistory: [{
-            receivedAmount: advanceAmount,
-            receivedBy: selectedBank ? receivedByWithBank : receivedBy,
-            paymentMethod: paymentMethod,
-            date: hiringDate,
-            paymentProof: hiringSlip,
-            staffAccount,
+          receivedAmount: advanceAmount,
+          receivedBy: selectedBank ? receivedByWithBank : receivedBy,
+          paymentMethod: paymentMethod,
+          date: hiringDate,
+          paymentProof: hiringSlip,
+          staffAccount,
+          isMonthlyPayment: isMonthlyHiring,
+          monthlyPeriodCovered: isMonthlyHiring ? `${monthlyHireStartDate.toISOString().split('T')[0]} to ${new Date(monthlyHireStartDate.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}` : undefined
         }]
-    });
+      });
 
       const savedCustomerAccount = await newCustomerAccount.save();
       
@@ -170,10 +186,6 @@ exports.listMaidAgain = async (req, res) => {
         return res.status(404).json({ error: 'Maid not found' });
       }
   
-      if (!existingMaid.isHired) {
-        return res.status(400).json({ error: 'Maid is not hired' });
-      }
-  
       const { option, officeCharges, returnAmount, staffAccount, receivedAmount, unHiringReason, paymentMethod, receivedBy,  newMaidId, newMaidPrice, sendedBy } = req.body;
       let paymentProof;
       const selectedBank = req.body.selectedBank;
@@ -203,6 +215,14 @@ exports.listMaidAgain = async (req, res) => {
         }
       }
 
+      if (existingMaid.isMonthlyHired) {
+          existingMaid.isMonthlyHired = false;
+          existingMaid.monthlyHireEndDate = null;
+      } else if (!existingMaid.isHired) {
+        return res.status(400).json({ error: 'Maid is not hired' });
+      }
+
+
       if (option === 'return') {
         const hiringRecord = await Hiring.findOne({ maidId }).sort({ timestamp: -1 });
         if (!hiringRecord) {
@@ -226,6 +246,11 @@ exports.listMaidAgain = async (req, res) => {
         }
         
         customerAccount.profileHiringStatus = 'Return';
+        customerAccount.isMonthlyHiring = false;
+        customerAccount.monthlyHiringDuration = undefined;
+        customerAccount.monthlyHireStartDate = undefined;
+        customerAccount.monthlyHireEndDate = undefined;
+        customerAccount.monthlyPaymentStatus = undefined;
         
         const receivedAfterOfficeCharges = customerAccount.receivedAmount - parseFloat(officeCharges);        
         customerAccount.receivedAmount = receivedAfterOfficeCharges ? receivedAfterOfficeCharges : 0;
@@ -427,6 +452,11 @@ exports.listMaidAgain = async (req, res) => {
         }
 
         customerAccount.profileHiringStatus = 'Replaced';
+        customerAccount.isMonthlyHiring = false;
+        customerAccount.monthlyHiringDuration = undefined;
+        customerAccount.monthlyHireStartDate = undefined;
+        customerAccount.monthlyHireEndDate = undefined;
+        customerAccount.monthlyPaymentStatus = undefined;
        
 
         const receivedAfterOfficeCharges = customerAccount.receivedAmount - parseFloat(officeCharges);

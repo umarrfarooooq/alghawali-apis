@@ -12,6 +12,8 @@ const accountHistorySchema = new mongoose.Schema({
   approved: { type: Boolean, default: false },
   staffAccount : String,
   pendingStaffId : String,
+  isMonthlyPayment: { type: Boolean, default: false },
+  monthlyPeriodCovered: { type: String }
 });
 
 const customerAccountSchema = new mongoose.Schema({
@@ -25,8 +27,13 @@ const customerAccountSchema = new mongoose.Schema({
   receivedAmount: { type: Number, default: 0 },
   returnAmount: { type: Number,  default: 0},
   uniqueCode: { type: String, required: true },
-  profileHiringStatus: { type: String, enum: ['Hired', 'Replaced', 'Return'], default: 'Hired' },
+  profileHiringStatus: { type: String, enum: ['Hired', 'MonthlyHired', 'Replaced', 'Return'], default: 'Hired' },
   cosPaymentStatus: { type: String, enum: ['Fully Paid', 'Partially Paid'], default: 'Partially Paid' },
+  isMonthlyHiring: { type: Boolean, default: false },
+  monthlyHiringDuration: { type: Number },
+  monthlyHireStartDate: { type: Date },
+  monthlyHireEndDate: { type: Date },
+  monthlyPaymentStatus: { type: String, enum: ['Up to Date', 'Overdue'], default: 'Up to Date' },
   accountHistory: [accountHistorySchema],
   timestamp: { type: Date, default: Date.now }
 });
