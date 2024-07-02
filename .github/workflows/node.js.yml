@@ -3,7 +3,7 @@ name: Alghawali Apis Deploy
 on:
   push:
     branches:
-      - main 
+      - master 
 
 jobs:
   deploy:
@@ -11,7 +11,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     
-    - name: Deploy to VPS
+    - name: Alghawali Apis Deploy
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.HOST }}
