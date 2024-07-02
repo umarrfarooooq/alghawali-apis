@@ -21,6 +21,6 @@ jobs:
           cd /root/alghawali/alghawali/training/training-apis
           git remote set-url origin git@github.com:umarrfarooooq/alghawali-apis.git
           ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
-          git pull origin main
+          git pull origin master
           npm install
           pm2 restart app.js
