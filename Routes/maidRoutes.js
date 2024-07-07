@@ -10,8 +10,12 @@ const roles = require("../config/roles");
 router.get('/', maidController.getAllMaids);
 router.get('/maidsInfo', verifyStaffToken, maidController.getMaidsInfo)
 router.get('/withHired', verifyStaffToken, checkPermission(roles.ShowOurMaid) || checkPermission(roles.CanEditMaid), maidController.getAllMaidsWithHired);
+router.get('/withMonthlyHired', verifyStaffToken, checkPermission(roles.ShowOurMaid) || checkPermission(roles.CanEditMaid), maidController.getAllMaidsWithMontlyHired);
+
+router.get('/withMonthlyHired/:staffId', verifyStaffToken, maidController.getAllMonthlyHiredMaidsByStaffId);
 router.get('/byStaff/hired/:staffId' , verifyStaffToken, maidController.getAllHiredMaidsByStaffId)
 router.get('/byStaff/non-hired/:staffId' , verifyStaffToken, maidController.getAllNonHiredMaidsByStaffId)
+
 router.post('/', verifyStaffToken, checkPermission(roles.CanAddMaid), 
 upload.fields([
   { name: 'maidImg', maxCount: 1 },
@@ -20,6 +24,7 @@ upload.fields([
   { name: 'maidImg4', maxCount: 1 },
   { name: 'videoLink', maxCount: 1 },
 ]), maidController.addMaid);
+
 router.put('/:id', verifyStaffToken, checkPermission(roles.CanEditMaid),
 upload.fields([
   { name: 'maidImg', maxCount: 1 },

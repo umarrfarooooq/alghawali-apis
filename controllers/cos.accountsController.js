@@ -124,7 +124,8 @@ exports.createHiring = async (req, res) => {
       });
 
       const savedCustomerAccount = await newCustomerAccount.save();
-      
+      await existingMaid.save();
+
       if (receivedBy) {
         const existingStaffAccount = await StaffAccount.findOne({staffName : receivedBy});
         if (!existingStaffAccount) {
@@ -1355,7 +1356,7 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
     }
   };
 
-  exports.getAllAccounts = async (req, res) => {
+exports.getAllAccounts = async (req, res) => {
     try {
         const { searchTerm } = req.query;
         let query = {};

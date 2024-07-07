@@ -85,7 +85,7 @@ app.get("/cicd", (req, res) => {
   res.send("Hello CICD 2")
 })
 
-// const loginRoute = require("./Routes/auth.route")
+
 
 const PORT = 5177
 
