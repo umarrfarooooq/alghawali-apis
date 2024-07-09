@@ -80,8 +80,10 @@ exports.createHiring = async (req, res) => {
         
         existingMaid.isMonthlyHired = true;
         existingMaid.monthlyHireEndDate = monthlyHireEndDate;
+        await existingMaid.save();
       } else {
         existingMaid.isHired = true;
+        await existingMaid.save();
       }
 
       const newPayment = {
@@ -124,7 +126,6 @@ exports.createHiring = async (req, res) => {
       });
 
       const savedCustomerAccount = await newCustomerAccount.save();
-      await existingMaid.save();
 
       if (receivedBy) {
         const existingStaffAccount = await StaffAccount.findOne({staffName : receivedBy});
@@ -1380,19 +1381,31 @@ exports.getAllAccounts = async (req, res) => {
 };
 
 exports.getMyCustomerAccounts = async (req, res) => {
-    try {
-        const staffId = req.params.staffId;
-        const myAccount = await CustomerAccount.find({staffId});
-
-        if(!myAccount) {
+  try {
+      const staffId = req.params.staffId;
+      const { searchTerm } = req.query;
+      
+      let query = { staffId };
+      
+      if (searchTerm) {
+          query.$or = [
+              { profileCode: { $regex: searchTerm, $options: 'i' } },
+              { customerName: { $regex: searchTerm, $options: 'i' } },
+              { uniqueCode: { $regex: searchTerm, $options: 'i' } }
+          ];
+      }
+      
+      const myAccounts = await CustomerAccount.find(query);
+      
+      if (myAccounts.length === 0) {
           return res.status(404).json({ error: 'Accounts information not found' });
-        }
-
-        res.status(200).json(myAccount);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'An error occurred' });
-    }
+      }
+      
+      res.status(200).json(myAccounts);
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'An error occurred' });
+  }
 };
 
 exports.getAccountByMaidId = async (req, res) => {
