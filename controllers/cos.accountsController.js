@@ -452,7 +452,7 @@ exports.listMaidAgain = async (req, res) => {
 
       hiringRecord.hiringStatus = false;
       hiringRecord.returnAmount = returnAmount || 0;
-      hiringRecord.officeCharges = officeCharges;
+      hiringRecord.officeCharges = officeCharges || 0;
       hiringRecord.paymentMethod = paymentMethod ? paymentMethod : "";
       hiringRecord.receivedBy = selectedBank ? receiverWithBank : receivedBy;
       hiringRecord.paymentProof = paymentProof;
@@ -474,7 +474,7 @@ exports.listMaidAgain = async (req, res) => {
       customerAccount.monthlyHireEndDate = undefined;
       customerAccount.monthlyPaymentStatus = undefined;
 
-      const receivedAfterOfficeCharges = customerAccount.receivedAmount - parseFloat(officeCharges);
+      const receivedAfterOfficeCharges = customerAccount.receivedAmount - parseFloat(officeCharges) || 0;
       customerAccount.profileId = null;
       if (receivedAfterOfficeCharges < customerAccount.returnAmount + returnAmount || 0) {
         return res
@@ -511,7 +511,7 @@ exports.listMaidAgain = async (req, res) => {
             approved: true,
           });
 
-          customerAccount.receivedAmount = parseFloat(receivedAmount);
+          customerAccount.receivedAmount += parseFloat(receivedAmount) || 0;
 
           if (customerAccount.receivedAmount === customerAccount.returnAmount) {
             customerAccount.cosPaymentStatus = "Fully Paid";
@@ -586,8 +586,8 @@ exports.listMaidAgain = async (req, res) => {
           req.staffRoles.includes(roles.fullAccessOnAccounts)
         ) {
           
-          existingStaffAccount.balance -= parseFloat(returnAmount);
-          existingStaffAccount.totalSentAmount += parseFloat(returnAmount);
+          existingStaffAccount.balance -= parseFloat(returnAmount) || 0;
+          existingStaffAccount.totalSentAmount += parseFloat(returnAmount) || 0;
           existingStaffAccount.accountHistory.push({
             amount: parseFloat(returnAmount),
             paymentMethod: selectedBank
@@ -612,7 +612,7 @@ exports.listMaidAgain = async (req, res) => {
             approved: true,
           });
 
-          customerAccount.returnAmount = parseFloat(returnAmount);
+          customerAccount.returnAmount += parseFloat(returnAmount) || 0;
 
           if (customerAccount.receivedAmount === customerAccount.returnAmount) {
             customerAccount.cosPaymentStatus = "Fully Paid";
@@ -666,15 +666,15 @@ exports.listMaidAgain = async (req, res) => {
       }
       existingMaid.isHired = false;
       await existingMaid.save();
-
-      res.status(200).json({ updatedHiring, updatedCustomerAccount });
+      await customerAccount.save();
+      res.status(200).json({ updatedHiring });
     } else if (option === "replace") {
       const newMaid = await Maid.findById(newMaidId);
       if (!newMaid) {
         return res.status(404).json({ error: "New maid not found" });
       }
 
-      if (newMaid.isHired) {
+      if (newMaid.isHired || newMaid.isMonthlyHired) {
         return res.status(400).json({ error: "New maid is already hired" });
       }
 
@@ -709,7 +709,7 @@ exports.listMaidAgain = async (req, res) => {
       customerAccount.monthlyPaymentStatus = undefined;
 
       const receivedAfterOfficeCharges =
-        customerAccount.receivedAmount - parseFloat(officeCharges);
+        customerAccount.receivedAmount - parseFloat(officeCharges) || 0;
 
         if (receivedAfterOfficeCharges < parseFloat(returnAmount)) {
           return res
@@ -719,7 +719,7 @@ exports.listMaidAgain = async (req, res) => {
 
       customerAccount.receivedAmount = receivedAfterOfficeCharges
         ? receivedAfterOfficeCharges
-        : 0;
+        : customerAccount.receivedAmount;
 
       const balance = newMaidPrice >= customerAccount.receivedAmount;
       customerAccount.totalAmount = newMaidPrice;
@@ -731,7 +731,6 @@ exports.listMaidAgain = async (req, res) => {
       customerAccount.profileId = newMaidId;
       customerAccount.profileCode = newMaid.code;
 
-      const updatedCustomerAccount = await customerAccount.save();
 
       const newHiring = new Hiring({
         fullName: customerAccount.customerName,
@@ -791,7 +790,7 @@ exports.listMaidAgain = async (req, res) => {
           });
 
           customerAccount.receivedAmount =
-            receivedAfterOfficeCharges >= 0 ? receivedAfterOfficeCharges : 0;
+            receivedAfterOfficeCharges >= 0 ? receivedAfterOfficeCharges : customerAccount.receivedAmount;
 
           if (balance) {
             receivedAmount
@@ -884,7 +883,7 @@ exports.listMaidAgain = async (req, res) => {
           req.staffRoles.includes(roles.fullAccessOnAccounts)
         ) {
           existingStaffAccount.balance -= parseFloat(returnAmount);
-          existingStaffAccount.totalSentAmount += parseFloat(returnAmount);
+          existingStaffAccount.totalSentAmount += parseFloat(returnAmount) || 0;
           existingStaffAccount.accountHistory.push({
             amount: parseFloat(returnAmount),
             paymentMethod: selectedBank
@@ -980,7 +979,7 @@ exports.listMaidAgain = async (req, res) => {
       newMaid.isHired = true;
       await existingMaid.save();
       await newMaid.save();
-
+      const updatedCustomerAccount = await customerAccount.save();
       res
         .status(201)
         .json({ updatedOldHiring, updatedCustomerAccount, savedNewHiring });
@@ -1618,7 +1617,7 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
         ) {
           existingStaffAccount.balance -= newAccountHistoryItem.returnAmount;
           existingStaffAccount.totalSentAmount +=
-            newAccountHistoryItem.returnAmount;
+            newAccountHistoryItem.returnAmount || 0;
           existingStaffAccount.accountHistory.push({
             amount: newAccountHistoryItem.returnAmount,
             paymentMethod: paymentData.selectedBank
@@ -1851,7 +1850,7 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
         ) {
           existingStaffAccount.balance -= newAccountHistoryItem.returnAmount;
           existingStaffAccount.totalSentAmount +=
-            newAccountHistoryItem.returnAmount;
+            newAccountHistoryItem.returnAmount || 0;
           existingStaffAccount.accountHistory.push({
             amount: newAccountHistoryItem.returnAmount,
             paymentMethod: paymentData.selectedBank
