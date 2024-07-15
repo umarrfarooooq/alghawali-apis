@@ -18,7 +18,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /root/alghawali/alghawali/training/training-apis
+            cd /root/alghawali/alghawali/training/apis
             git remote set-url origin git@github.com:umarrfarooooq/alghawali-apis.git
             ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
             git pull origin master
