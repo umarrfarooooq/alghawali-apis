@@ -6,12 +6,12 @@ on:
       - master 
 
 jobs:
-  deploy:
+  deploy_training_apis:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
 
-      - name: Alghawali Apis Deploy
+      - name: Deploy Training APIs
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.HOST }}
@@ -19,8 +19,27 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /root/alghawali/alghawali/training/apis
-            git remote set-url origin git@github.com:umarrfarooooq/alghawali-apis.git
+            git remote set-url origin git@github.com:umarrfarooooq/training-apis.git
             ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
             git pull --rebase origin master
+            npm install
+            pm2 restart app.js
+
+  deploy_alghawali_apis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Deploy Alghawali APIs
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/alghawali/alghawali/alghawali-apis/alghawali-apis
+            git remote set-url origin git@github.com:umarrfarooooq/alghawali-apis.git
+            ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+            git pull
             npm install
             pm2 restart app.js
