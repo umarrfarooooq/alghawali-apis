@@ -82,7 +82,7 @@ app.use('/api/v1/staffAccounts', staffAccountsRoute);
 app.use('/cv', cvRoute)
 
 app.get("/cicd", (req, res) => {
-  res.send("Hello CICD Test 2")
+  res.send("Hello CICD Test finale")
 })
 
 
