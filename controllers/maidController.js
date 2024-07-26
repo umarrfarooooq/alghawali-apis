@@ -616,16 +616,22 @@ exports.getMaidsInfo = async (req, res) => {
   try {
     const totalMaids = await Maid.countDocuments();
     const hiredMaids = await Maid.countDocuments({ isHired: true });
-    const unhiredMaids = await Maid.countDocuments({ isHired: false });
-    const remainingMaids = totalMaids - hiredMaids;
+    const monthlyHiredMaids = await Maid.countDocuments({ isMonthlyHired: true });
+    const unhiredMaids = await Maid.countDocuments({ isHired: false, isMonthlyHired: false });
+    const remainingMaids = totalMaids - hiredMaids - monthlyHiredMaids;
 
     const unHiredNationalityInfo = await Maid.aggregate([
-      { $match: { isHired: false } },
+      { $match: { isHired: false, isMonthlyHired: false } },
       { $group: { _id: '$nationality', count: { $sum: 1 } } }
     ]);
 
     const hiredNationalityInfo = await Maid.aggregate([
       { $match: { isHired: true } },
+      { $group: { _id: '$nationality', count: { $sum: 1 } } }
+    ]);
+
+    const monthlyHiredNationalityInfo = await Maid.aggregate([
+      { $match: { isMonthlyHired: true } },
       { $group: { _id: '$nationality', count: { $sum: 1 } } }
     ]);
 
@@ -643,6 +649,11 @@ exports.getMaidsInfo = async (req, res) => {
       hiredNationalityCount[nationality._id] = nationality.count;
     });
 
+    const monthlyHiredNationalityCount = {};
+    monthlyHiredNationalityInfo.forEach(nationality => {
+      monthlyHiredNationalityCount[nationality._id] = nationality.count;
+    });
+
     const allNationalityCount = {};
     allNationalityInfo.forEach(nationality => {
       allNationalityCount[nationality._id] = nationality.count;
@@ -651,10 +662,12 @@ exports.getMaidsInfo = async (req, res) => {
     res.status(200).json({
       totalMaids,
       hiredMaids,
+      monthlyHiredMaids,
       unhiredMaids,
       remainingMaids,
       unHiredNationalityCount,
       hiredNationalityCount,
+      monthlyHiredNationalityCount,
       allNationalityCount
     });
   } catch (error) {
