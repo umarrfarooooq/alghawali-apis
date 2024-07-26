@@ -22,6 +22,7 @@ mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
 const allowedOrigins = [
   'https://www.alghawalimanpower.com',
   'https://access.alghawalimanpower.com',
+  'https://office.alghawalimanpower.com',
   'https://admin.panel.alghawalimanpower.com',
   'http://localhost:5173',
   'http://localhost:3000',

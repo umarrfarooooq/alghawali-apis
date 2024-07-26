@@ -3,7 +3,19 @@ const AgentMaidRequest = require('../Models/Agent-Maids');
 
 exports.createMaidRequest = async (req, res) => {
   try {
-    const { maidName } = req.body;
+    const {
+      maidName,
+      maritalStatus,
+      numberOfChildren,
+      experienceYears,
+      experienceCountry,
+      religion,
+      otherReligion,
+      languages,
+      otherLanguages,
+      education
+    } = req.body;
+
     const agentId = req.agentId;
     const agentExists = await Agent.findById(agentId);
     if (!agentExists) {
@@ -18,13 +30,29 @@ exports.createMaidRequest = async (req, res) => {
     const maidPassportFront = req.files.maidPassportFront ? req.files.maidPassportFront[0].path : null;
     const maidPassportBack = req.files.maidPassportBack ? req.files.maidPassportBack[0].path : null;
 
+    let processedLanguages = Array.isArray(languages) ? languages : [languages];
+    if (otherLanguages) {
+      processedLanguages = [...processedLanguages, otherLanguages];
+    }
+
+    const processedReligion = religion === 'Other' ? otherReligion : religion;
+
     const newMaidRequest = new AgentMaidRequest({
       agentId,
       maidName,
       maidImage,
       maidVideo,
       maidPassportFront,
-      maidPassportBack
+      maidPassportBack,
+      maritalStatus,
+      numberOfChildren: parseInt(numberOfChildren),
+      experience: {
+        years: parseInt(experienceYears),
+        country: experienceCountry
+      },
+      religion: processedReligion,
+      languages: processedLanguages,
+      education
     });
 
     const savedMaidRequest = await newMaidRequest.save();

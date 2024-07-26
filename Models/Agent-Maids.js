@@ -15,14 +15,46 @@ const agentMaidRequestSchema = new mongoose.Schema({
     required: true
   },
   maidVideo: {
-    type: String,
-    required: true
+    type: String
   },
   maidPassportFront: {
     type: String,
     required: true
   },
   maidPassportBack: {
+    type: String,
+    required: true
+  },
+  maritalStatus: {
+    type: String,
+    required: true,
+    enum: ['Single', 'Married', 'Divorced', 'Widowed']
+  },
+  numberOfChildren: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  experience: {
+    years: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    country: {
+      type: String,
+      required: true
+    }
+  },
+  religion: {
+    type: String,
+    required: true
+  },
+  languages: {
+    type: [String],
+    required: true
+  },
+  education: {
     type: String,
     required: true
   },
