@@ -37,6 +37,7 @@ app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(bodyParser.urlencoded({extended:true}));
 app.use(express.json());
+app.use(bodyParser.json());
 app.set("views" , path.join(__dirname , "views"))
 app.set('view engine', 'ejs');
 app.use(methodOverride('_method'));

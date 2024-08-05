@@ -6,8 +6,9 @@ const roles = require("../config/roles")
 const checkPermission = require("../middlewears/checkPermission")
 
 router.post("/invite-agent", verifyStaffToken, checkPermission(roles.ShowAgentRequest), agentController.inviteAgent)
+router.get("/all-agents", verifyStaffToken, checkPermission(roles.ShowAgentRequest), agentController.getAllAgents)
 router.post("/complete-signup/:token", agentController.completeSignup)
-router.post("/toggle-block", verifyStaffToken, checkPermission(roles.ShowAgentRequest), agentController.toggleAgentBlock)
+router.post("/toggle-block/:id", verifyStaffToken, checkPermission(roles.ShowAgentRequest), agentController.toggleAgentBlock)
 router.post("/login", agentController.login)
 router.post("/google-login", agentController.googleLogin)
 

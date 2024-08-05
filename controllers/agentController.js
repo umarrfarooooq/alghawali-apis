@@ -1,8 +1,8 @@
-const Agent = require('../Models/Agent');
-const sendEmail = require('../config/sendEmail');
-const { OAuth2Client } = require('google-auth-library');
+const Agent = require("../Models/Agent");
+const sendEmail = require("../config/sendEmail");
+const { OAuth2Client } = require("google-auth-library");
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-const crypto = require('crypto');
+const crypto = require("crypto");
 
 exports.inviteAgent = async (req, res) => {
   try {
@@ -13,36 +13,54 @@ exports.inviteAgent = async (req, res) => {
     if (agent) {
       return res.status(400).json({
         success: false,
-        error: 'Agent already exists'
+        error: "Agent already exists",
       });
     }
 
     agent = new Agent({
       email,
-      status: 'invited'
+      status: "invited",
     });
 
     const inviteToken = agent.getInviteToken();
 
     await agent.save();
-
-    const inviteUrl = `${req.protocol}://${req.get('host')}/complete-signup/${inviteToken}`;
+    const inviteUrl = `${process.env.AGENT_FRONTEND_URL}en/signup/${inviteToken}`;
 
     await sendEmail({
       email: agent.email,
-      subject: 'Invitation to join as an agent',
-      message: `You've been invited to join as an agent. Please use this link to complete your signup: ${inviteUrl}`
+      subject: "Invitation to join as an agent",
+      message: `You've been invited to join as an agent. Please use this link to complete your signup: ${inviteUrl}`,
     });
 
     res.status(200).json({
       success: true,
-      inviteUrl : inviteUrl,
-      message: 'Invitation sent successfully'
+      inviteUrl: inviteUrl,
+      message: "Invitation sent successfully",
     });
   } catch (error) {
     res.status(400).json({
       success: false,
-      error: error.message
+      error: error.message,
+    });
+  }
+};
+
+exports.getAllAgents = async (req, res) => {
+  try {
+    const agents = await Agent.find({}).select("-password").exec();
+
+    const totalAgents = await Agent.countDocuments({});
+
+    res.status(200).json({
+      success: true,
+      data: agents,
+      totalAgents,
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error.message,
     });
   }
 };
@@ -50,25 +68,25 @@ exports.inviteAgent = async (req, res) => {
 exports.completeSignup = async (req, res) => {
   try {
     const inviteToken = crypto
-      .createHash('sha256')
+      .createHash("sha256")
       .update(req.params.token)
-      .digest('hex');
+      .digest("hex");
 
     const agent = await Agent.findOne({
       inviteToken,
-      inviteTokenExpire: { $gt: Date.now() }
+      inviteTokenExpire: { $gt: Date.now() },
     });
 
     if (!agent) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid or expired invite token'
+        error: "Invalid or expired invite token",
       });
     }
 
     agent.password = req.body.password;
     agent.name = req.body.name;
-    agent.status = 'active';
+    agent.status = "active";
     agent.inviteToken = undefined;
     agent.inviteTokenExpire = undefined;
 
@@ -76,12 +94,12 @@ exports.completeSignup = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Signup completed successfully'
+      message: "Signup completed successfully",
     });
   } catch (error) {
     res.status(400).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -93,32 +111,48 @@ exports.login = async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({
         success: false,
-        error: 'Please provide an email and password'
+        error: "Please provide an email and password",
       });
     }
 
-    const agent = await Agent.findOne({ email }).select('+password');
+    const agent = await Agent.findOne({ email }).select("+password");
 
     if (!agent) {
       return res.status(401).json({
         success: false,
-        error: 'Invalid credentials'
+        error: "Invalid credentials",
+      });
+    }
+    if (agent.isGoogleUser) {
+      return res.status(401).json({
+        success: false,
+        error:
+          "This account was created using Google login. Please log in using Google.",
+      });
+    }
+    if (password && agent.password) {
+      const isMatch = await agent.matchPassword(password);
+
+      if (!isMatch) {
+        return res.status(401).json({
+          success: false,
+          error: "Invalid credentials",
+        });
+      }
+    }
+
+    if (agent.status === "blocked") {
+      return res.status(403).json({
+        success: false,
+        error: "Your account has been blocked. Please contact support.",
       });
     }
 
-    const isMatch = await agent.matchPassword(password);
-
-    if (!isMatch) {
+    if (agent.status !== "active") {
       return res.status(401).json({
         success: false,
-        error: 'Invalid credentials'
-      });
-    }
-
-    if (agent.status !== 'active') {
-      return res.status(401).json({
-        success: false,
-        error: 'Your account is not active. Please complete the signup process.'
+        error:
+          "Your account is not active. Please complete the signup process.",
       });
     }
 
@@ -126,12 +160,13 @@ exports.login = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      token
+      token,
     });
   } catch (error) {
+    console.error("Error in login:", error);
     res.status(400).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -143,18 +178,19 @@ exports.toggleAgentBlock = async (req, res) => {
     if (!agent) {
       return res.status(404).json({
         success: false,
-        error: 'Agent not found'
+        error: "Agent not found",
       });
     }
 
-    if (agent.status === 'invited') {
+    if (agent.status === "invited") {
       return res.status(400).json({
         success: false,
-        error: 'Cannot block an invited agent. They must complete signup first.'
+        error:
+          "Cannot block an invited agent. They must complete signup first.",
       });
     }
 
-    agent.status = agent.status === 'blocked' ? 'active' : 'blocked';
+    agent.status = agent.status === "blocked" ? "active" : "blocked";
     await agent.save();
 
     res.status(200).json({
@@ -163,13 +199,13 @@ exports.toggleAgentBlock = async (req, res) => {
         id: agent._id,
         name: agent.name,
         email: agent.email,
-        status: agent.status
-      }
+        status: agent.status,
+      },
     });
   } catch (error) {
     res.status(400).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -179,7 +215,7 @@ exports.googleLogin = async (req, res) => {
     const { token } = req.body;
     const ticket = await client.verifyIdToken({
       idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID
+      audience: process.env.GOOGLE_CLIENT_ID,
     });
     const { name, email, sub } = ticket.getPayload();
 
@@ -188,23 +224,26 @@ exports.googleLogin = async (req, res) => {
     if (!agent) {
       return res.status(401).json({
         success: false,
-        error: 'You need to be invited to use this system. Please contact an administrator.'
+        error:
+          "You need to be invited to use this system. Please contact an administrator.",
       });
     }
 
-    if (agent.status === 'blocked') {
+    if (agent.status === "blocked") {
       return res.status(401).json({
         success: false,
-        error: 'Your account has been blocked. Please contact an administrator.'
+        error:
+          "Your account has been blocked. Please contact an administrator.",
       });
     }
 
-    if (agent.status === 'invited') {
+    if (agent.status === "invited") {
       agent.name = name;
       agent.googleId = sub;
-      agent.status = 'active';
+      agent.status = "active";
       agent.inviteToken = undefined;
       agent.inviteTokenExpire = undefined;
+      agent.isGoogleUser = true;
     } else {
       if (!agent.googleId) {
         agent.googleId = sub;
@@ -213,15 +252,14 @@ exports.googleLogin = async (req, res) => {
     const jwtToken = agent.getSignedJwtToken();
     await agent.save();
 
-
     res.status(200).json({
       success: true,
-      token: jwtToken
+      token: jwtToken,
     });
   } catch (error) {
     res.status(400).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 };

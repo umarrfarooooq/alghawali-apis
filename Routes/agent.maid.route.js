@@ -13,7 +13,16 @@ router.post("/create-maid-request", verifyAgentToken, upload.fields([
 ]), maidRequestController.createMaidRequest)
 
 router.get("/all-requests", maidRequestController.getAllMaidRequests)
-router.get("/request", maidRequestController.getMaidRequestById)
-router.get("/update-request-status", maidRequestController.updateMaidRequestStatus)
+router.get("/agent-maids/:agentId", maidRequestController.getAgentMaids)
+router.get("/request/:id", maidRequestController.getMaidRequestById)
+router.put("/update-maid/:agentId/:maidRequestId", upload.fields([
+    { name: 'maidImage', maxCount: 1 },
+    { name: 'videoLink', maxCount: 1 },
+    { name: 'maidPassportFront', maxCount: 1 },
+    { name: 'maidPassportBack', maxCount: 1 }
+]), maidRequestController.updateMaidRequest)
+router.put("/update-request-status/:id", maidRequestController.updateMaidRequestStatus)
+router.delete("/:agentId/:maidRequestId", maidRequestController.deleteAgentMaidRequest)
+
 
 module.exports = router;

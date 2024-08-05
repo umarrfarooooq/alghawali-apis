@@ -1,74 +1,72 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const agentMaidRequestSchema = new mongoose.Schema({
   agentId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Agent',
-    required: true
+    ref: "Agent",
+    required: true,
   },
   maidName: {
     type: String,
-    required: true
+    required: true,
   },
   maidImage: {
     type: String,
-    required: true
+    required: true,
   },
   maidVideo: {
-    type: String
+    type: String,
   },
   maidPassportFront: {
     type: String,
-    required: true
+    required: true,
   },
   maidPassportBack: {
     type: String,
-    required: true
+    required: false,
   },
   maritalStatus: {
     type: String,
     required: true,
-    enum: ['Single', 'Married', 'Divorced', 'Widowed']
+    enum: ["Single", "Married", "Divorced", "Widowed"],
   },
   numberOfChildren: {
-    type: Number,
-    required: true,
-    min: 0
+    type: String,
   },
   experience: {
     years: {
-      type: Number,
-      required: true,
-      min: 0
+      type: String,
     },
     country: {
       type: String,
-      required: true
-    }
+    },
   },
   religion: {
     type: String,
-    required: true
+    required: true,
   },
   languages: {
     type: [String],
-    required: true
+    required: true,
   },
   education: {
     type: String,
-    required: true
+    required: true,
   },
   status: {
     type: String,
-    enum: ['pending', 'approved', 'rejected'],
-    default: 'pending'
+    enum: ["pending", "approved", "rejected"],
+    default: "pending",
   },
   createdAt: {
     type: Date,
-    default: Date.now
-  }
+    default: Date.now,
+  },
 });
 
-const AgentMaidRequest = mongoose.model('AgentMaidRequest', agentMaidRequestSchema);
+const AgentMaidRequest = mongoose.model(
+  "AgentMaidRequest",
+  agentMaidRequestSchema
+);
 
 module.exports = AgentMaidRequest;

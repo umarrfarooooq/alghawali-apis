@@ -21,13 +21,16 @@ const agentSchema = new mongoose.Schema({
   password: {
     type: String,
     minlength: 6,
-    select: false
+    select: false,
+    default: null,
   },
   googleId: {
     type: String,
     unique: true,
-    sparse: true
+    sparse: true,
+    default: null
   },
+  isGoogleUser: { type: Boolean, default: false },
   role: {
     type: String,
     enum: ['agent', 'admin'],

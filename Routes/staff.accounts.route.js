@@ -20,7 +20,7 @@ router.post("/transfer-amount", upload.single("paymentProof") , verifyStaffToken
 router.post("/debit-amount", upload.single("paymentProof") , verifyStaffToken, checkPermission(roles.canAccessOnAccounts || roles.fullAccessOnAccounts), staffAccountController.debitAmount)
 
 
-router.put("/reset", staffAccountController.resetAmounts)
-router.put("/resetApprovals", staffAccountController.removeAllPendingRequests)
+router.put("/reset", verifyStaffToken, checkPermission(roles.fullAccessOnAccounts), staffAccountController.resetAmounts)
+router.put("/resetApprovals", verifyStaffToken, checkPermission(roles.fullAccessOnAccounts), staffAccountController.removeAllPendingRequests)
 
 module.exports = router;
