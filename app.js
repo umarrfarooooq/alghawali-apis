@@ -72,6 +72,7 @@ const costumerAccountsRoute = require("./Routes/cos.accounts.route")
 const staffAccountsRoute = require("./Routes/staff.accounts.route")
 const agentsRoute = require("./Routes/agent.route")
 const agentMaidsRoute = require("./Routes/agent.maid.route")
+const agentRegistration = require("./Routes/agentRegister.route")
 
 // API'S
 app.use('/api/v1/maids', maidRoutes);
@@ -84,14 +85,11 @@ app.use('/api/v1/customerAccounts', costumerAccountsRoute);
 app.use('/api/v1/staffAccounts', staffAccountsRoute);
 app.use('/api/v1/agents', agentsRoute);
 app.use('/api/v1/agentMaids', agentMaidsRoute);
+app.use('/api/v1/agentRegister', agentRegistration);
 
 
 // Pages 
 app.use('/cv', cvRoute)
-
-app.get("/cicd", (req, res) => {
-  res.send("Hello CICD Test finale")
-})
 
 
 
