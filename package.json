@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@vitalets/google-translate-api": "^9.2.0",
     "axios": "^1.7.2",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^1.40.0",
@@ -25,6 +26,7 @@
     "fluent-ffmpeg": "^2.1.2",
     "google-auth-library": "^9.11.0",
     "html-pdf": "^3.0.1",
+    "http-proxy-agent": "^7.0.2",
     "jimp": "^0.22.10",
     "jsonwebtoken": "^9.0.1",
     "method-override": "^3.0.0",
@@ -36,6 +38,7 @@
     "passport-google-oauth20": "^2.0.0",
     "puppeteer": "21.1.1",
     "sharp": "^0.32.6",
+    "translate": "^3.0.0",
     "uuid": "^9.0.1"
   }
 }
