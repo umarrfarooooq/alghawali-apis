@@ -6,6 +6,7 @@ const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
 const ejs = require("ejs");
+const translate = require('@iamtraction/google-translate');
 
 router.get("/:userId", async (req, res) => {
   const maidId = req.params.userId;
@@ -15,12 +16,56 @@ router.get("/:userId", async (req, res) => {
     if (!findMaid) {
       return res.status(404).send("No maid found with that ID");
     }
-    res.render("cv", { maidData: findMaid });
+
+    const fieldsToTranslate = [
+      "name",
+      "nationality",
+      "salery",
+      "religion",
+      "maritalStatus",
+      "childrens",
+      "age",
+      "education",
+      "languages",
+      "contractPeriod",
+      "remarks",
+      "appliedFor",
+      "experience",
+    ];
+
+    const arabicMaidData = {};
+
+    await Promise.all(
+      fieldsToTranslate.map(async (field) => {
+        const value = findMaid[field];
+        try {
+          if (typeof value === "string") {
+            const translation = await translate(value, {from: 'en', to: "ar" });
+            arabicMaidData[field] = translation.text;
+          } else if (Array.isArray(value)) {
+            arabicMaidData[field] = await Promise.all(
+              value.map(async (item) => {
+                const translation = await translate(item, {from: 'en', to: "ar" });
+                return translation.text;
+              })
+            );
+          } else {
+            arabicMaidData[field] = value.toString();
+          }
+        } catch (err) {
+          console.error(`Error translating field "${field}":`, err);
+          arabicMaidData[field] = value.toString();
+        }
+      })
+    );
+    
+    res.render("cv", { maidData: findMaid, arabicMaidData });
   } catch (err) {
-    console.log(err);
+    console.error("Server error:", err);
     res.status(500).send("Server error: " + err.message);
   }
 });
+
 
 router.get("/pdf/:userId", async (req, res) => {
   const maidId = req.params.userId;
