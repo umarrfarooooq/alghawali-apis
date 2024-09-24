@@ -24,6 +24,7 @@ const allowedOrigins = [
   'https://access.alghawalimanpower.com',
   'https://office.alghawalimanpower.com',
   'https://training.alghawalimanpower.com',
+  'https://alghawali-accounts.vercel.app',
   'https://admin.panel.alghawalimanpower.com',
   'https://agent.alghawalimanpower.com',
   'https://www.agent.alghawalimanpower.com',
