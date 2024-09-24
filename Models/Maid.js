@@ -1,105 +1,115 @@
 const mongoose = require("mongoose");
 
 const maidSchema = new mongoose.Schema({
-    code: {
-      type: String,
-      required: true,
-    },
-    name:  {
-      type: String,
-      required: true,
-    },
-    nationality: {
-      type: String,
-      required: true,
-    },
-    position: {
-      type: String,
-      required: false,
-    },
-    salery: {
-      type: Number,
-      required: true,
-    },
-    price: {
-      type: Number,
-      required: false,
-    },
-    religion: {
-      type: String,
-      required: true,
-    },
-    maritalStatus: {
-      type: String,
-      required: true,
-    },
-    childrens: {
-      type: Number,
-      required: false,
-    },
-    age: {
-      type: Number,
-      required: true,
-    },
-    education: {
-      type: String,
-      required: true,
-    },
-    languages: {
-      type: Array,
-      required: true,
-    },
-    contractPeriod: {
+  code: {
     type: String,
     required: true,
   },
-    remarks: {
+  name: {
     type: String,
     required: true,
   },
-    addedBy: {
+  nationality: {
+    type: String,
+    required: true,
+  },
+  position: {
     type: String,
     required: false,
   },
-    staffId: {
+  salery: {
+    type: Number,
+    required: true,
+  },
+  price: {
+    type: Number,
+    required: false,
+  },
+  religion: {
+    type: String,
+    required: true,
+  },
+  maritalStatus: {
+    type: String,
+    required: true,
+  },
+  childrens: {
+    type: Number,
+    required: false,
+  },
+  age: {
+    type: Number,
+    required: true,
+  },
+  education: {
+    type: String,
+    required: true,
+  },
+  languages: {
+    type: Array,
+    required: true,
+  },
+  contractPeriod: {
+    type: String,
+    required: true,
+  },
+  remarks: {
+    type: String,
+    required: true,
+  },
+  addedBy: {
     type: String,
     required: false,
   },
-    maidImg: {
+  staffId: {
+    type: String,
+    required: false,
+  },
+  maidImg: {
     type: String,
     required: true,
   },
-    maidImg2: {
+  maidImg2: {
     type: String,
   },
-    maidImg3: {
+  maidImg3: {
     type: String,
   },
-    maidImg4: {
+  maidImg4: {
     type: String,
   },
-    videoLink: {
+  videoLink: {
     type: String,
   },
-    appliedFor: {
+  appliedFor: {
     type: String,
     required: true,
   },
-    experience: {
+  experience: {
     type: String,
   },
-    isHired: {
-      type: Boolean,
-      default: false
-    },
-    isMonthlyHired: {
+  isHired: {
     type: Boolean,
-    default: false
+    default: false,
   },
-    monthlyHireEndDate: {
-      type: Date
-    },
-    timestamp: { type: Date, default: Date.now }
-  });
-  
-  module.exports = mongoose.model('Maid', maidSchema);
+  isMonthlyHired: {
+    type: Boolean,
+    default: false,
+  },
+  isOnTrial: {
+    type: Boolean,
+    default: false,
+  },
+  hiringDate: {
+    type: Date,
+  },
+  monthlyHireEndDate: {
+    type: Date,
+  },
+  trialEndDate: {
+    type: Date,
+  },
+  timestamp: { type: Date, default: Date.now },
+});
+
+module.exports = mongoose.model("Maid", maidSchema);

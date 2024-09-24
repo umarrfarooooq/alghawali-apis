@@ -69,10 +69,14 @@ const cvRoute = require("./Routes/CV/cv.routes")
 const visaRoute = require("./Routes/visa.route")
 const customRequirementRoute = require("./Routes/customRequirement.route")
 const costumerAccountsRoute = require("./Routes/cos.accounts.route")
+const costumersRoute = require("./Routes/customers.route.v2")
 const staffAccountsRoute = require("./Routes/staff.accounts.route")
 const agentsRoute = require("./Routes/agent.route")
 const agentMaidsRoute = require("./Routes/agent.maid.route")
 const agentRegistration = require("./Routes/agentRegister.route")
+const hiringRoute = require("./Routes/hiring.route")
+const transactionRoute = require("./Routes/transaction.route")
+const invoiceRoute = require("./controllers/invoiceController")
 
 // API'S
 app.use('/api/v1/maids', maidRoutes);
@@ -82,14 +86,18 @@ app.use('/api/v1/staff', staffRoute);
 app.use('/api/v1/visa', visaRoute);
 app.use('/api/v1/customRequirements', customRequirementRoute);
 app.use('/api/v1/customerAccounts', costumerAccountsRoute);
+app.use('/api/v2/customers', costumersRoute);
 app.use('/api/v1/staffAccounts', staffAccountsRoute);
 app.use('/api/v1/agents', agentsRoute);
 app.use('/api/v1/agentMaids', agentMaidsRoute);
 app.use('/api/v1/agentRegister', agentRegistration);
+app.use('/api/v2/hiring', hiringRoute);
+app.use('/api/v1/transaction', transactionRoute);
 
 
 // Pages 
 app.use('/cv', cvRoute)
+app.use('/invoice', invoiceRoute)
 
 
 

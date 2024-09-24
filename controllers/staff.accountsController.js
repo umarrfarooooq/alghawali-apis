@@ -1,6 +1,8 @@
 const CustomerAccount = require("../Models/Cos.Accounts");
+const CustomerAccountV2 = require("../Models/Customer-Account-v2");
 const StaffAccount = require("../Models/staffAccounts");
 const roles = require("../config/roles");
+const moment = require("moment");
 
 function generateUniqueCode() {
   const uniqueCodeLength = 6;
@@ -60,6 +62,19 @@ exports.getAllAccountNames = async (req, res) => {
     res.status(500).json({ error: "An error occurred" });
   }
 };
+exports.getAllAccountNamesAndId = async (req, res) => {
+  try {
+    const allAccounts = await StaffAccount.find({}, "staffName _id");
+    const staffData = allAccounts.map((account) => ({
+      id: account._id.toString(),
+      name: account.staffName,
+    }));
+    res.status(200).json(staffData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
 
 exports.getAllPendingApprovals = async (req, res) => {
   try {
@@ -91,6 +106,73 @@ exports.getAccountById = async (req, res) => {
     }
 
     res.status(200).json(accountOfStaffId);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
+
+exports.getAccountDetailsById = async (req, res) => {
+  try {
+    const staffId = req.params.staffId;
+    const { period, startDate, endDate } = req.query;
+
+    const accountOfStaffId = await StaffAccount.findOne({ staffId });
+    if (!accountOfStaffId) {
+      return res.status(404).json({ error: "Account not found for Staff ID" });
+    }
+
+    const { balance, totalReceivedAmount, totalSentAmount, accountHistory } =
+      accountOfStaffId;
+
+    let filteredHistory = accountHistory;
+    let start, end;
+
+    if (period || (startDate && endDate)) {
+      if (startDate && endDate) {
+        start = moment(startDate);
+        end = moment(endDate);
+      } else {
+        switch (period.toLowerCase()) {
+          case "daily":
+            start = moment().startOf("day");
+            end = moment().endOf("day");
+            break;
+          case "weekly":
+            start = moment().startOf("week");
+            end = moment().endOf("week");
+            break;
+          case "monthly":
+            start = moment().startOf("month");
+            end = moment().endOf("month");
+            break;
+          case "yearly":
+            start = moment().startOf("year");
+            end = moment().endOf("year");
+            break;
+          default:
+            start = moment().startOf("day");
+            end = moment().endOf("day");
+        }
+      }
+
+      filteredHistory = accountHistory.filter((entry) => {
+        const entryDate = moment(entry.timestamp);
+        return entryDate.isBetween(start, end, null, "[]");
+      });
+    }
+
+    res.status(200).json({
+      balance,
+      totalReceivedAmount,
+      totalSentAmount,
+      accountHistory: filteredHistory,
+      filterParams: {
+        period: period || "all",
+        startDate: start ? start.format("YYYY-MM-DD") : null,
+        endDate: end ? end.format("YYYY-MM-DD") : null,
+      },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "An error occurred" });
@@ -424,19 +506,24 @@ exports.editPendingPayment = async (req, res) => {
       if (historyToUpdate) {
         if ("amount" in req.body || "amount" in updatedDetails) {
           if (historyToUpdate.receivedAmount !== undefined) {
-            historyToUpdate.receivedAmount = req.body.amount || updatedDetails.amount;
+            historyToUpdate.receivedAmount =
+              req.body.amount || updatedDetails.amount;
           } else if (historyToUpdate.returnAmount !== undefined) {
-            historyToUpdate.returnAmount = req.body.amount || updatedDetails.amount;
+            historyToUpdate.returnAmount =
+              req.body.amount || updatedDetails.amount;
           }
         }
         if ("receivedBy" in req.body || "receivedBy" in updatedDetails) {
-          historyToUpdate.receivedBy = req.body.receivedBy || updatedDetails.receivedBy;
+          historyToUpdate.receivedBy =
+            req.body.receivedBy || updatedDetails.receivedBy;
         }
         if ("sendedBy" in req.body || "sendedBy" in updatedDetails) {
-          historyToUpdate.sendedBy = req.body.sendedBy || updatedDetails.sendedBy;
+          historyToUpdate.sendedBy =
+            req.body.sendedBy || updatedDetails.sendedBy;
         }
         if ("paymentMethod" in req.body || "paymentMethod" in updatedDetails) {
-          historyToUpdate.paymentMethod = req.body.paymentMethod || updatedDetails.paymentMethod;
+          historyToUpdate.paymentMethod =
+            req.body.paymentMethod || updatedDetails.paymentMethod;
         }
         if ("date" in req.body || "date" in updatedDetails) {
           historyToUpdate.date = req.body.date || updatedDetails.date;
@@ -459,10 +546,11 @@ exports.editPendingPayment = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "An error occurred while editing the pending payment" });
+    res
+      .status(500)
+      .json({ error: "An error occurred while editing the pending payment" });
   }
 };
-
 
 exports.getAllAccountsSummary = async (req, res) => {
   try {
@@ -796,24 +884,154 @@ exports.getAllAccountSummary = async (req, res) => {
   }
 };
 
+exports.getAllAccountSummaryWithFilters = async (req, res) => {
+  try {
+    const period = (req.query.period || "").toLowerCase();
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+    let dateFilter = {};
+
+    if (startDate && endDate) {
+      dateFilter = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      };
+    } else if (period) {
+      const now = new Date();
+      let periodStartDate;
+      switch (period) {
+        case "weekly":
+          periodStartDate = new Date(now.setDate(now.getDate() - 7));
+          break;
+        case "monthly":
+          periodStartDate = new Date(now.setMonth(now.getMonth() - 1));
+          break;
+        case "yearly":
+          periodStartDate = new Date(now.setFullYear(now.getFullYear() - 1));
+          break;
+        default:
+          return res.status(400).json({
+            error: "Invalid period. Use 'weekly', 'monthly', or 'yearly'.",
+          });
+      }
+      dateFilter = { $gte: periodStartDate };
+    }
+
+    const allStaffAccounts = await StaffAccount.find();
+
+    let totalReceived = 0;
+    let totalSent = 0;
+    let totalBalance = 0;
+    let totalTillNowReceived = 0;
+    let totalTillNowSent = 0;
+    let totalPendingReceived = 0;
+    let totalPendingSent = 0;
+    let totalPendingReceivedTillNow = 0;
+    let totalPendingSentTillNow = 0;
+
+    allStaffAccounts.forEach((account) => {
+      const allTransactions = [
+        ...account.accountHistory,
+        ...account.pendingApprovals,
+      ];
+
+      allTransactions.forEach((transaction) => {
+        const isWithinFilter =
+          !dateFilter.$gte ||
+          (transaction.date >= dateFilter.$gte &&
+            (!dateFilter.$lte || transaction.date <= dateFilter.$lte));
+
+        if (transaction.type === "Received") {
+          if (transaction.approved) {
+            totalTillNowReceived += transaction.amount;
+            if (isWithinFilter) totalReceived += transaction.amount;
+          } else {
+            totalPendingReceivedTillNow += transaction.amount;
+            if (isWithinFilter) totalPendingReceived += transaction.amount;
+          }
+        } else if (transaction.type === "Sent") {
+          if (transaction.approved) {
+            totalTillNowSent += transaction.amount;
+            if (isWithinFilter) totalSent += transaction.amount;
+          } else {
+            totalPendingSentTillNow += transaction.amount;
+            if (isWithinFilter) totalPendingSent += transaction.amount;
+          }
+        }
+      });
+    });
+
+    totalBalance = totalReceived - totalSent;
+
+    const allCustomerAccounts = await CustomerAccountV2.find();
+    let totalVisaChangeAmount = 0;
+    let totalUniformAmount = 0;
+    let totalVisaChangeAmountTillNow = 0;
+    let totalUniformAmountTillNow = 0;
+
+    allCustomerAccounts.forEach((customer) => {
+      totalVisaChangeAmountTillNow += customer.visaChangeAmount;
+      totalUniformAmountTillNow += customer.uniformAmount;
+
+      if (
+        !dateFilter.$gte ||
+        (customer.timestamp >= dateFilter.$gte &&
+          (!dateFilter.$lte || customer.timestamp <= dateFilter.$lte))
+      ) {
+        totalVisaChangeAmount += customer.visaChangeAmount;
+        totalUniformAmount += customer.uniformAmount;
+      }
+    });
+
+    const summary = {
+      totalReceived,
+      totalSent,
+      totalBalance,
+      totalVisaChangeAmount,
+      totalUniformAmount,
+      totalTillNowReceived,
+      totalTillNowSent,
+      totalVisaChangeAmountTillNow,
+      totalUniformAmountTillNow,
+      totalPendingReceived,
+      totalPendingSent,
+      totalPendingReceivedTillNow,
+      totalPendingSentTillNow,
+      period: period || "custom",
+      startDate:
+        startDate || (dateFilter.$gte ? dateFilter.$gte.toISOString() : null),
+      endDate: endDate || new Date().toISOString(),
+    };
+
+    res.status(200).json(summary);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
 
 exports.resetAmounts = async (req, res) => {
   try {
-    await StaffAccount.updateMany({}, {
-      $set: {
-        balance: 0,
-        totalReceivedAmount: 0,
-        totalSentAmount: 0,
-        transferHistory: [],
-        accountHistory: [],
-        pendingApprovals: []
+    await StaffAccount.updateMany(
+      {},
+      {
+        $set: {
+          balance: 0,
+          totalReceivedAmount: 0,
+          totalSentAmount: 0,
+          transferHistory: [],
+          accountHistory: [],
+          pendingApprovals: [],
+        },
       }
-    });
+    );
 
     res.status(200).json({ message: "Amounts reset successfully" });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "An error occurred while resetting amounts" });
+    res
+      .status(500)
+      .json({ error: "An error occurred while resetting amounts" });
   }
 };
 exports.removeAllPendingRequests = async (req, res) => {
@@ -823,6 +1041,8 @@ exports.removeAllPendingRequests = async (req, res) => {
     res.status(200).json({ message: "Pending requests removed successfully" });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "An error occurred while removing pending requests" });
+    res
+      .status(500)
+      .json({ error: "An error occurred while removing pending requests" });
   }
 };

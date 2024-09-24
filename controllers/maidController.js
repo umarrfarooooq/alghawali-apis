@@ -457,7 +457,7 @@ exports.getAllMaids = async (req, res) => {
       .skip(offset)
       .limit(Number(perPage));
 
-      const availableMaids = allMaids.filter((maid) => !maid.isHired && !maid.isMonthlyHired);
+      const availableMaids = allMaids.filter((maid) => !maid.isHired && !maid.isMonthlyHired && !maid.isOnTrial);
       res.status(200).json(availableMaids);
   } catch (error) {
     console.error("Error fetching maid profiles:", error);
