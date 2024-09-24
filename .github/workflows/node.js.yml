@@ -1,12 +1,14 @@
-name: Alghawali Apis Deploy
+name: Alghawali APIs Deploy
 
 on:
   push:
     branches:
-      - master 
+      - master
+      - training
 
 jobs:
   deploy_training_apis:
+    if: github.ref == 'refs/heads/training' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -21,11 +23,14 @@ jobs:
             cd /root/alghawali/alghawali/training/apis
             git remote set-url origin git@github.com:umarrfarooooq/training-apis.git
             ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
-            git pull --rebase origin master
+            git fetch origin
+            git checkout ${{ github.ref_name }}
+            git pull origin ${{ github.ref_name }}
             npm install
             pm2 restart app.js
 
   deploy_alghawali_apis:
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
