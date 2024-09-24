@@ -103,7 +103,7 @@ app.use('/invoice', invoiceRoute)
 
 
 const MAIN_PORT = 5177;
-const TRAINING_PORT = 5178;
+const TRAINING_PORT = 5199;
 
 const PORT = process.env.NODE_ENV === 'training' ? TRAINING_PORT : MAIN_PORT;
 
