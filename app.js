@@ -23,6 +23,7 @@ const allowedOrigins = [
   'https://www.alghawalimanpower.com',
   'https://access.alghawalimanpower.com',
   'https://office.alghawalimanpower.com',
+  'https://training.alghawalimanpower.com',
   'https://admin.panel.alghawalimanpower.com',
   'https://agent.alghawalimanpower.com',
   'https://www.agent.alghawalimanpower.com',
@@ -101,8 +102,11 @@ app.use('/invoice', invoiceRoute)
 
 
 
-const PORT = 5177
+const MAIN_PORT = 5177;
+const TRAINING_PORT = 5178;
 
-app.listen(PORT, () =>{
-    console.log("Server is runiing on port " + PORT );
-})
+const PORT = process.env.NODE_ENV === 'training' ? TRAINING_PORT : MAIN_PORT;
+
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
