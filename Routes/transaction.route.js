@@ -31,12 +31,7 @@ router.get(
   checkPermission(roles.canAccessOnAccounts),
   transactionController.getMyAllRecentTransactions
 );
-router.get(
-  "/:id",
-  verifyStaffToken,
-  checkPermission(roles.canAccessOnAccounts),
-  transactionController.getTransactionById
-);
+
 router.post(
   "/handlePendingTransaction",
   verifyStaffToken,
@@ -49,6 +44,41 @@ router.put(
   verifyStaffToken,
   checkPermission(roles.fullAccessOnAccounts),
   hiringController.editTransaction
+);
+
+router.get(
+  "/customer/:customerId",
+  verifyStaffToken,
+  checkPermission(roles.canAccessOnAccounts),
+  transactionController.getCustomerTransactions
+);
+
+router.get(
+  "/staff/:staffId",
+  verifyStaffToken,
+  checkPermission(roles.fullAccessOnAccounts),
+  transactionController.getStaffTransactions
+);
+
+router.get(
+  "/my/transactions",
+  verifyStaffToken,
+  checkPermission(roles.canAccessOnAccounts),
+  transactionController.getMyTransactions
+);
+
+router.get(
+  "/staff/:staffId/summary",
+  verifyStaffToken,
+  checkPermission(roles.canAccessOnAccounts),
+  transactionController.getStaffTransactionsSummary
+);
+
+router.get(
+  "/:id",
+  verifyStaffToken,
+  checkPermission(roles.canAccessOnAccounts),
+  transactionController.getTransactionById
 );
 
 module.exports = router;

@@ -1,5 +1,6 @@
 const CustomerAccount = require("../Models/Cos.Accounts");
 const CustomerAccountV2 = require("../Models/Customer-Account-v2");
+const Transaction = require("../Models/Transaction");
 const StaffAccount = require("../Models/staffAccounts");
 const roles = require("../config/roles");
 const moment = require("moment");
@@ -1010,6 +1011,122 @@ exports.getAllAccountSummaryWithFilters = async (req, res) => {
   }
 };
 
+exports.getAllAccountsTransactionHistory = async (req, res) => {
+  try {
+    const period = (req.query.period || "").toLowerCase();
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+    let dateFilter = {};
+
+    if (startDate && endDate) {
+      dateFilter = {
+        date: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate),
+        },
+      };
+    } else if (period) {
+      const now = new Date();
+      let periodStartDate;
+      switch (period) {
+        case "weekly":
+          periodStartDate = new Date(now.setDate(now.getDate() - 7));
+          break;
+        case "monthly":
+          periodStartDate = new Date(now.setMonth(now.getMonth() - 1));
+          break;
+        case "yearly":
+          periodStartDate = new Date(now.setFullYear(now.getFullYear() - 1));
+          break;
+        default:
+          return res.status(400).json({
+            error: "Invalid period. Use 'weekly', 'monthly', or 'yearly'.",
+          });
+      }
+      dateFilter = { date: { $gte: periodStartDate } };
+    }
+
+    // Fetch all transactions for total till now calculations
+    const allTransactions = await Transaction.find();
+
+    // Fetch transactions within the date filter
+    const filteredTransactions = await Transaction.find(dateFilter)
+      .populate("customer")
+      .populate("actionBy")
+      .populate("receivedBy")
+      .populate("sendedBy");
+
+    let totalReceived = 0;
+    let totalSent = 0;
+    let totalBalance = 0;
+    let totalPendingReceived = 0;
+    let totalPendingSent = 0;
+    let totalTillNowReceived = 0;
+    let totalTillNowSent = 0;
+    let totalPendingReceivedTillNow = 0;
+    let totalPendingSentTillNow = 0;
+
+    // Calculate totals for all transactions (till now)
+    allTransactions.forEach((transaction) => {
+      if (transaction.type === "Received") {
+        if (transaction.status === "Approved") {
+          totalTillNowReceived += transaction.amount;
+        } else if (transaction.status === "Pending") {
+          totalPendingReceivedTillNow += transaction.amount;
+        }
+      } else if (transaction.type === "Sent") {
+        if (transaction.status === "Approved") {
+          totalTillNowSent += transaction.amount;
+        } else if (transaction.status === "Pending") {
+          totalPendingSentTillNow += transaction.amount;
+        }
+      }
+    });
+
+    // Calculate totals for filtered transactions
+    filteredTransactions.forEach((transaction) => {
+      if (transaction.type === "Received") {
+        if (transaction.status === "Approved") {
+          totalReceived += transaction.amount;
+        } else if (transaction.status === "Pending") {
+          totalPendingReceived += transaction.amount;
+        }
+      } else if (transaction.type === "Sent") {
+        if (transaction.status === "Approved") {
+          totalSent += transaction.amount;
+        } else if (transaction.status === "Pending") {
+          totalPendingSent += transaction.amount;
+        }
+      }
+    });
+
+    totalBalance = totalReceived - totalSent;
+
+    const summary = {
+      totalReceived,
+      totalSent,
+      totalBalance,
+      totalPendingReceived,
+      totalPendingSent,
+      totalTillNowReceived,
+      totalTillNowSent,
+      totalPendingReceivedTillNow,
+      totalPendingSentTillNow,
+      period: period || "custom",
+      startDate:
+        startDate ||
+        (dateFilter.date?.$gte ? dateFilter.date.$gte.toISOString() : null),
+      endDate: endDate || new Date().toISOString(),
+    };
+
+    res.status(200).json(summary);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ error: "An error occurred", details: error.message });
+  }
+};
 exports.resetAmounts = async (req, res) => {
   try {
     await StaffAccount.updateMany(

@@ -41,6 +41,12 @@ router.get(
   staffAccountController.getAllAccountSummaryWithFilters
 );
 router.get(
+  "/all-transactions",
+  verifyStaffToken,
+  checkPermission(roles.fullAccessOnAccounts),
+  staffAccountController.getAllAccountsTransactionHistory
+);
+router.get(
   "/my-account/:staffId",
   verifyStaffToken,
   checkPermission(roles.canAccessOnAccounts || roles.fullAccessOnAccounts),

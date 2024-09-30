@@ -11,6 +11,39 @@ router.get(
   checkPermission(roles.fullAccessOnAccounts),
   customerController.getAllAccounts
 );
+router.get(
+  "/customer-account/:maidId",
+  verifyStaffToken,
+  checkPermission(roles.canAccessOnAccounts),
+  customerController.getCustomerAccountForMaid
+);
+router.get(
+  "/customer-account-for-customer/:customerId",
+  verifyStaffToken,
+  checkPermission(roles.canAccessOnAccounts),
+  customerController.getCustomerAccountForCustomer
+);
+
+router.get(
+  "/customer-account-by-id/:customerId",
+  verifyStaffToken,
+  checkPermission(roles.canAccessOnAccounts),
+  customerController.getCustomerById
+);
+
+router.get(
+  "/active-customers",
+  verifyStaffToken,
+  checkPermission(roles.fullAccessOnAccounts),
+  customerController.getAllActiveCustomers
+);
+
+router.get(
+  "/active-customers-for-user",
+  verifyStaffToken,
+  checkPermission(roles.canAccessOnAccounts),
+  customerController.getAllActiveCustomersForUser
+);
 
 router.get(
   "/my/all",

@@ -48,7 +48,7 @@ exports.createHiringOrTrial = async (req, res) => {
     const selectedBank = req.body.selectedBank;
 
     if (!isValidObjectId(maidId))
-      return res.status(400).json({ error: "Invalid maid ID format" });
+      return res.status(400).json({ error: "Invalid maid ID" });
     if (
       !fullName ||
       typeof fullName !== "string" ||
@@ -156,7 +156,6 @@ exports.createHiringOrTrial = async (req, res) => {
     let monthlyHireStartDate, monthlyHireEndDate;
 
     if (isTrial) {
-      if(!trialDuration) return res.status(400).json({error: "Trial duration is required"})
       trialStartDate = new Date(hiringDate);
       const trialDurationMilliseconds = trialDuration * 24 * 60 * 60 * 1000;
       trialEndDate = new Date(
@@ -164,7 +163,6 @@ exports.createHiringOrTrial = async (req, res) => {
       );
       trialStatus = "Active";
     } else if (isMonthlyHiring) {
-      if(!monthlyHiringDuration) return res.status(400).json({error: "Monthly hiring duration is required"})
       monthlyHireStartDate = new Date(hiringDate);
       const daysPerMonth = 30;
       const totalDays = parseFloat(monthlyHiringDuration) * daysPerMonth;
@@ -299,17 +297,75 @@ exports.createHiringOrTrial = async (req, res) => {
 exports.returnMaid = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
+
   try {
-    const { maidId, officeCharges } = req.body;
+    const {
+      maidId,
+      returnAmount,
+      officeCharges,
+      paymentMethod,
+      sendedBy,
+      staffAccount,
+      returnReason,
+      returnDate,
+    } = req.body;
+    const selectedBank = req.body.selectedBank;
 
     if (!isValidObjectId(maidId)) {
-      session.abortTransaction();
-      return res.status(400).json({ error: "Invalid maid ID format" });
+      return res.status(400).json({ error: "Invalid maid ID" });
+    }
+    if (isNaN(parseFloat(returnAmount)) || parseFloat(returnAmount) < 0) {
+      return res.status(400).json({ error: "Invalid return amount minimum 0" });
+    }
+    if (isNaN(parseFloat(officeCharges)) || parseFloat(officeCharges) < 0) {
+      return res
+        .status(400)
+        .json({ error: "Invalid office charges minimum 0" });
+    }
+    if (parseFloat(returnAmount) > 0) {
+      if (!paymentMethod || typeof paymentMethod !== "string") {
+        return res.status(400).json({ error: "Invalid payment method" });
+      }
+      if (!sendedBy || typeof sendedBy !== "string") {
+        return res.status(400).json({ error: "Invalid sender information" });
+      }
+      if (!isValidObjectId(sendedBy)) {
+        await session.abortTransaction();
+        return res.status(400).json({ error: "Invalid sendedBy ID" });
+      }
+    }
+    if (!staffAccount || typeof staffAccount !== "string") {
+      return res.status(400).json({ error: "Invalid staff account" });
+    }
+    if (!returnReason || typeof returnReason !== "string") {
+      return res.status(400).json({ error: "Invalid return reason" });
+    }
+    if (!returnDate || isNaN(Date.parse(returnDate))) {
+      return res.status(400).json({ error: "Valid return date is required" });
     }
 
-    if (isNaN(parseFloat(officeCharges)) || parseFloat(officeCharges) < 0) {
+    if (!isValidObjectId(staffAccount)) {
       await session.abortTransaction();
-      return res.status(400).json({ error: "Invalid office charges" });
+      return res.status(400).json({ error: "Invalid staffAccount ID" });
+    }
+
+    const actionStaff = await StaffAccount.findById(staffAccount).session(
+      session
+    );
+    if (!actionStaff) {
+      await session.abortTransaction();
+      return res.status(404).json({ error: "Action staff not found" });
+    }
+
+    let returnSlip;
+    if (req.file) {
+      const uniqueImageName = `${uuidv4()}_${req.file.filename}.webp`;
+      const compressedImagePath = `uploads/images/${uniqueImageName}`;
+      await sharp(req.file.path)
+        .resize({ width: 800 })
+        .webp({ quality: 70 })
+        .toFile(compressedImagePath);
+      returnSlip = compressedImagePath;
     }
 
     const maid = await Maid.findById(maidId).session(session);
@@ -336,14 +392,16 @@ exports.returnMaid = async (req, res) => {
         .json({ error: "Active customer account not found for this maid" });
     }
 
+    const totalReturnAmount =
+      parseFloat(returnAmount) + parseFloat(officeCharges);
     if (
-      officeCharges >
+      totalReturnAmount >
       customerAccount.receivedAmount + customerAccount.pendingReceivedAmount
     ) {
       await session.abortTransaction();
       return res
         .status(400)
-        .json({ error: "Office charges exceeds received amount" });
+        .json({ error: "Total return amount exceeds received amount" });
     }
 
     // Update maid status
@@ -357,6 +415,69 @@ exports.returnMaid = async (req, res) => {
     if (parseFloat(officeCharges) > 0) {
       customerAccount.receivedAmount -= parseFloat(officeCharges);
       customerAccount.officeCharges += parseFloat(officeCharges);
+    }
+
+    let transaction;
+    if (parseFloat(returnAmount) > 0) {
+      const senderStaff = await StaffAccount.findById(sendedBy).session(
+        session
+      );
+      if (!senderStaff) {
+        await session.abortTransaction();
+        return res.status(404).json({ error: "Sender staff not found" });
+      }
+
+      transaction = new Transaction({
+        customer: customerAccount._id,
+        amount: parseFloat(returnAmount),
+        paymentMethod: selectedBank
+          ? `${paymentMethod} (${selectedBank})`
+          : paymentMethod,
+        actionBy: actionStaff._id,
+        date: new Date(returnDate),
+        sendedBy: senderStaff._id,
+        proof: returnSlip,
+        type: "Sent",
+        status:
+          req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)
+            ? "Approved"
+            : "Pending",
+        description: `Maid return: ${returnReason || "No reason provided"}`,
+      });
+
+      await transaction.save({ session });
+
+      const invoiceData = await generateInvoice(
+        "Return",
+        maid,
+        customerAccount,
+        transaction,
+        actionStaff,
+        senderStaff
+      );
+
+      transaction.invoice.number = invoiceData.invoiceNumber;
+      transaction.invoice.path = invoiceData.pdfFilePath;
+      await transaction.save({ session });
+
+      customerAccount.transactions.push(transaction._id);
+
+      if (
+        req.staffRoles &&
+        req.staffRoles.includes(roles.fullAccessOnAccounts)
+      ) {
+        senderStaff.balance -= parseFloat(returnAmount);
+        senderStaff.totalSentAmount += parseFloat(returnAmount);
+        customerAccount.returnAmount += parseFloat(returnAmount);
+        customerAccount.receivedAmount -= parseFloat(returnAmount);
+      } else {
+        senderStaff.pendingSentAmount += parseFloat(returnAmount);
+        customerAccount.pendingReturnAmount += parseFloat(returnAmount);
+        customerAccount.pendingReceivedAmount -= parseFloat(returnAmount);
+      }
+
+      senderStaff.transactions.push(transaction._id);
+      await senderStaff.save({ session });
     }
 
     if (
@@ -380,11 +501,11 @@ exports.returnMaid = async (req, res) => {
     ]);
 
     await session.commitTransaction();
-    res.status(200).json({ message: "Maid return processed successfully" });
+    res
+      .status(200)
+      .json({ message: "Maid return processed successfully", transaction });
   } catch (error) {
-    if (session.inTransaction()) {
-      await session.abortTransaction();
-    }
+    await session.abortTransaction();
     console.error(error);
     res
       .status(500)
@@ -395,318 +516,462 @@ exports.returnMaid = async (req, res) => {
 };
 
 exports.replaceMaid = async (req, res) => {
-  let session;
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    session = await mongoose.startSession();
-    await session.withTransaction(async () => {
-      const { oldMaidId, newMaidId, newMaidPrice, officeCharges, replaceDate } =
-        req.body;
+    const {
+      oldMaidId,
+      newMaidId,
+      newMaidPrice,
+      officeCharges,
+      paymentMethod,
+      receivedBy,
+      sendedBy,
+      staffAccount,
+      replaceReason,
+      replaceDate,
+      paymentAmount,
+    } = req.body;
+    const selectedBank = req.body.selectedBank;
 
-      // Input validation
-      if (!isValidObjectId(oldMaidId) || !isValidObjectId(newMaidId)) {
-        return res.status(400).json({ error: "Invalid maid ID" });
-      }
-      if (isNaN(parseFloat(officeCharges)) || parseFloat(officeCharges) < 0) {
-        return res.status(400).json({ error: "Invalid office charges" });
-      }
-      if (isNaN(parseFloat(newMaidPrice)) || parseFloat(newMaidPrice) <= 0) {
-        return res.status(400).json({ error: "Invalid new maid price" });
-      }
+    // Input validation
+    if (!isValidObjectId(oldMaidId) || !isValidObjectId(newMaidId)) {
+      return res.status(400).json({ error: "Invalid maid ID" });
+    }
+    if (!replaceDate || isNaN(Date.parse(replaceDate))) {
+      return res.status(400).json({ error: "Valid replace date is required" });
+    }
+    if (!isValidObjectId(staffAccount)) {
+      return res.status(400).json({ error: "Invalid staffAccount ID" });
+    }
+    if (isNaN(newMaidPrice) || newMaidPrice <= 0) {
+      return res.status(400).json({ error: "Invalid new maid price" });
+    }
+    if (
+      paymentAmount === undefined ||
+      isNaN(paymentAmount) ||
+      paymentAmount < 0
+    ) {
+      return res.status(400).json({
+        error:
+          "Payment amount is required and must be a number greater than or equal to 0",
+      });
+    }
 
-      // Find and validate staff members, maids, and customer account
-      const [oldMaid, newMaid, customerAccount] = await Promise.all([
-        Maid.findById(oldMaidId).session(session),
-        Maid.findById(newMaidId).session(session),
-        CustomerAccountV2.findOne({
-          maid: oldMaidId,
-          profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
-        })
-          .sort({ _id: -1 })
-          .session(session),
-      ]);
-      if (
-        !oldMaid ||
-        (!oldMaid.isHired && !oldMaid.isMonthlyHired && !oldMaid.isOnTrial)
-      ) {
-        return res
-          .status(404)
-          .json({ error: "Old maid not found or not currently hired" });
-      }
-      if (
-        !newMaid ||
-        newMaid.isHired ||
-        newMaid.isMonthlyHired ||
-        newMaid.isOnTrial
-      ) {
-        return res
-          .status(404)
-          .json({ error: "New maid not found or already hired" });
-      }
-      if (!customerAccount) {
-        return res.status(404).json({
-          error: "Active customer account not found for the old maid",
-        });
-      }
+    // Find and validate staff members, maids, and customer account
+    const [oldMaid, newMaid, customerAccount, actionStaff] = await Promise.all([
+      Maid.findById(oldMaidId).session(session),
+      Maid.findById(newMaidId).session(session),
+      CustomerAccountV2.findOne({
+        maid: oldMaidId,
+        profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
+      })
+        .sort({ _id: -1 })
+        .session(session),
+      StaffAccount.findById(staffAccount).session(session),
+    ]);
 
-      if (
-        officeCharges >
-        customerAccount.receivedAmount + customerAccount.pendingReceivedAmount
-      ) {
+    if (
+      !oldMaid ||
+      (!oldMaid.isHired && !oldMaid.isMonthlyHired && !oldMaid.isOnTrial)
+    ) {
+      await session.abortTransaction();
+      return res
+        .status(404)
+        .json({ error: "Old maid not found or not currently hired" });
+    }
+    if (
+      !newMaid ||
+      newMaid.isHired ||
+      newMaid.isMonthlyHired ||
+      newMaid.isOnTrial
+    ) {
+      await session.abortTransaction();
+      return res
+        .status(404)
+        .json({ error: "New maid not found or already hired" });
+    }
+    if (!customerAccount) {
+      await session.abortTransaction();
+      return res
+        .status(404)
+        .json({ error: "Active customer account not found for the old maid" });
+    }
+    if (!actionStaff) {
+      await session.abortTransaction();
+      return res.status(404).json({ error: "Action staff member not found" });
+    }
+
+    // Calculate amounts
+    const totalReceivedAmount =
+      customerAccount.receivedAmount + customerAccount.pendingReceivedAmount;
+    const amountAfterCharges = totalReceivedAmount - parseFloat(officeCharges);
+    const priceDifference = newMaidPrice - amountAfterCharges;
+    let transactionType,
+      transactionAmount,
+      transactionDescription,
+      transactionStaff;
+
+    if (priceDifference > 0) {
+      transactionType = "Received";
+      transactionAmount = priceDifference;
+      transactionDescription = `Maid replacement: ${
+        replaceReason || "No reason provided"
+      }. Additional payment required.`;
+      transactionStaff = await StaffAccount.findById(receivedBy).session(
+        session
+      );
+    } else {
+      transactionType = "Sent";
+      transactionAmount = Math.abs(priceDifference);
+      transactionDescription = `Maid replacement: ${
+        replaceReason || "No reason provided"
+      }. Refund due to price difference.`;
+      transactionStaff = await StaffAccount.findById(sendedBy).session(session);
+    }
+
+    if (transactionAmount > 0 && paymentAmount > 0 && !transactionStaff) {
+      await session.abortTransaction();
+      return res.status(404).json({
+        error: `${
+          transactionType === "Received" ? "Receiver" : "Sender"
+        } staff not found`,
+      });
+    }
+
+    // Handle payment amount
+    if (paymentAmount !== undefined) {
+      if (paymentAmount > transactionAmount) {
+        await session.abortTransaction();
         return res
           .status(400)
-          .json({ error: "Office charges exceeds received amount" });
+          .json({ error: "Payment amount exceeds the required amount" });
       }
-
-      // Update maid statuses
-      oldMaid.isOnTrial = false;
-      oldMaid.isHired = false;
-      oldMaid.isMonthlyHired = false;
-      oldMaid.hiringDate = null;
-      oldMaid.monthlyHireEndDate = null;
-      oldMaid.trialEndDate = null;
-
-      newMaid.isHired = customerAccount.profileHiringStatus === "Hired";
-      newMaid.isMonthlyHired =
-        customerAccount.profileHiringStatus === "Monthly Hired";
-      newMaid.isOnTrial = customerAccount.profileHiringStatus === "On Trial";
-      newMaid.hiringDate = new Date(replaceDate);
-
-      // Update customer account
-      customerAccount.maid = newMaidId;
-      customerAccount.totalAmount = parseFloat(newMaidPrice);
-
-      if (officeCharges > 0) {
-        customerAccount.officeCharges += parseFloat(officeCharges);
-        customerAccount.receivedAmount -= parseFloat(officeCharges);
-      }
-
-      const totalPaid =
-        customerAccount.receivedAmount + customerAccount.pendingReceivedAmount;
-      if (totalPaid === customerAccount.totalAmount) {
-        customerAccount.cosPaymentStatus = "Fully Paid";
-      } else if (totalPaid > customerAccount.totalAmount) {
-        customerAccount.cosPaymentStatus = "Partially Refunded";
-      } else {
-        customerAccount.cosPaymentStatus = "Partially Paid";
-      }
-
-      await oldMaid.save({ session });
-      await newMaid.save({ session });
-      await customerAccount.save({ session });
-    });
-
-    res.status(200).json({
-      message: "Maid replaced successfully",
-    });
-  } catch (error) {
-    console.error("Error in replaceMaid:", error);
-    return res
-      .status(500)
-      .json({ error: "An error occurred while replacing the maid" });
-  } finally {
-    if (session) {
-      session.endSession();
+      transactionAmount = paymentAmount;
     }
-  }
-};
 
-exports.updateCustomerPayment = async (req, res) => {
-  let session;
-  try {
-    session = await mongoose.startSession();
-    await session.withTransaction(async () => {
-      const {
-        customerId,
-        paymentAmount,
-        paymentMethod,
-        staffAccount,
-        receiverOrSenderId,
-        paymentDate,
-        paymentType, // 'receive' or 'refund'
-        description,
-      } = req.body;
-      const selectedBank = req.body.selectedBank;
+    // Update maid statuses
+    oldMaid.isOnTrial = oldMaid.isHired = oldMaid.isMonthlyHired = false;
+    oldMaid.hiringDate =
+      oldMaid.monthlyHireEndDate =
+      oldMaid.trialEndDate =
+        null;
 
-      // Input validation
-      if (!isValidObjectId(customerId)) {
-        throw new Error("Invalid customer ID format");
-      }
-      if (isNaN(parseFloat(paymentAmount)) || parseFloat(paymentAmount) <= 0) {
-        throw new Error("Invalid payment amount");
-      }
-      if (!paymentMethod || typeof paymentMethod !== "string") {
-        throw new Error("Invalid payment method");
-      }
-      if (
-        !isValidObjectId(staffAccount) ||
-        !isValidObjectId(receiverOrSenderId)
-      ) {
-        throw new Error("Invalid staff account ID");
-      }
-      if (!paymentDate || isNaN(Date.parse(paymentDate))) {
-        return res.status(400);
-        throw new Error("Valid payment date is required");
-      }
-      if (!["receive", "refund"].includes(paymentType)) {
-        throw new Error("Invalid payment type");
-      }
-      // Check for payment proof if user doesn't have full access
-      if (
-        req.staffRoles &&
-        !req.staffRoles.includes(roles.fullAccessOnAccounts) &&
-        !req.file
-      ) {
-        throw new Error("Payment proof is required for this transaction");
-      }
+    newMaid.isHired = customerAccount.profileHiringStatus === "Hired";
+    newMaid.isMonthlyHired =
+      customerAccount.profileHiringStatus === "Monthly Hired";
+    newMaid.isOnTrial = customerAccount.profileHiringStatus === "On Trial";
+    newMaid.hiringDate = new Date(replaceDate);
 
-      // Find and validate customer account and staff members
-      const [customerAccount, actionStaff, receiverOrSenderStaff] =
-        await Promise.all([
-          CustomerAccountV2.findById(customerId).session(session),
-          StaffAccount.findById(staffAccount).session(session),
-          StaffAccount.findById(receiverOrSenderId).session(session),
-        ]);
-
-      if (!customerAccount) {
-        throw new Error("Customer account not found");
-      }
-      if (!actionStaff || !receiverOrSenderStaff) {
-        throw new Error("Staff account not found");
-      }
-      // Process payment proof if provided
-      let paymentProof;
-      if (req.file) {
-        const uniqueImageName = `${uuidv4()}_${req.file.filename}.webp`;
-        const compressedImagePath = `uploads/images/${uniqueImageName}`;
-        await sharp(req.file.path)
-          .resize({ width: 800 })
-          .webp({ quality: 70 })
-          .toFile(compressedImagePath);
-        paymentProof = compressedImagePath;
-      }
-
-      // Create transaction
-      const transaction = new Transaction({
+    let transaction;
+    if (transactionAmount > 0) {
+      transaction = new Transaction({
         customer: customerAccount._id,
-        amount: parseFloat(paymentAmount),
+        amount: parseFloat(transactionAmount.toFixed(2)),
         paymentMethod: selectedBank
           ? `${paymentMethod} (${selectedBank})`
           : paymentMethod,
         actionBy: actionStaff._id,
-        date: new Date(paymentDate),
-        [paymentType === "receive" ? "receivedBy" : "sendedBy"]:
-          receiverOrSenderStaff._id,
-        proof: paymentProof,
-        type: paymentType === "receive" ? "Received" : "Sent",
+        date: new Date(replaceDate),
+        [transactionType === "Received" ? "receivedBy" : "sendedBy"]:
+          transactionStaff._id,
+        type: transactionType,
         status:
           req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)
             ? "Approved"
             : "Pending",
-        description: description || "No Description provided",
+        description: transactionDescription,
       });
-
       await transaction.save({ session });
-
       // Generate invoice
-      const maid = await Maid.findById(customerAccount.maid).session(session);
       const invoiceData = await generateInvoice(
-        paymentType === "receive" ? "Additional Payment" : "Refund",
-        maid,
+        "Replace",
+        newMaid,
         customerAccount,
         transaction,
         actionStaff,
-        receiverOrSenderStaff
+        transactionStaff
       );
       transaction.invoice = {
         number: invoiceData.invoiceNumber,
         path: invoiceData.pdfFilePath,
       };
       await transaction.save({ session });
-
-      // Update customer account and staff balances
       customerAccount.transactions.push(transaction._id);
-      receiverOrSenderStaff.transactions.push(transaction._id);
+      transactionStaff.transactions.push(transaction._id);
 
+      // Handle transaction based on staff roles
       if (
         req.staffRoles &&
         req.staffRoles.includes(roles.fullAccessOnAccounts)
       ) {
-        if (paymentType === "receive") {
-          customerAccount.receivedAmount += parseFloat(paymentAmount);
-          receiverOrSenderStaff.balance += parseFloat(paymentAmount);
-          receiverOrSenderStaff.totalReceivedAmount +=
-            parseFloat(paymentAmount);
+        if (transactionType === "Received") {
+          customerAccount.receivedAmount += transactionAmount;
+          transactionStaff.balance += transactionAmount;
+          transactionStaff.totalReceivedAmount += transactionAmount;
         } else {
-          customerAccount.returnAmount += parseFloat(paymentAmount);
-          customerAccount.receivedAmount -= parseFloat(paymentAmount);
-          receiverOrSenderStaff.balance -= parseFloat(paymentAmount);
-          receiverOrSenderStaff.totalSentAmount += parseFloat(paymentAmount);
+          customerAccount.receivedAmount -= transactionAmount;
+          customerAccount.returnAmount += transactionAmount;
+          transactionStaff.balance -= transactionAmount;
+          transactionStaff.totalSentAmount += transactionAmount;
         }
       } else {
-        if (paymentType === "receive") {
-          customerAccount.pendingReceivedAmount += parseFloat(paymentAmount);
-          receiverOrSenderStaff.pendingReceivedAmount +=
-            parseFloat(paymentAmount);
+        if (transactionType === "Received") {
+          customerAccount.pendingReceivedAmount += transactionAmount;
+          transactionStaff.pendingReceivedAmount += transactionAmount;
         } else {
-          customerAccount.pendingReturnAmount += parseFloat(paymentAmount);
-          customerAccount.pendingReceivedAmount -= parseFloat(paymentAmount);
-          receiverOrSenderStaff.pendingSentAmount += parseFloat(paymentAmount);
+          customerAccount.pendingReturnAmount += transactionAmount;
+          transactionStaff.pendingSentAmount += transactionAmount;
+          customerAccount.pendingReceivedAmount -= transactionAmount;
         }
       }
-
-      const totalPaid =
-        customerAccount.receivedAmount + customerAccount.pendingReceivedAmount;
-
-      if (paymentType === "receive") {
-        if (totalPaid > customerAccount.totalAmount) {
-          throw new Error("Payment amount exceeds the total amount");
-        }
-        if (totalPaid === customerAccount.totalAmount) {
-          customerAccount.cosPaymentStatus = "Fully Paid";
-        } else {
-          customerAccount.cosPaymentStatus = "Partially Paid";
-        }
-      } else if (paymentType === "refund") {
-        if (customerAccount.profileHiringStatus !== "Return") {
-          if (totalPaid < customerAccount.totalAmount) {
-            throw new Error("Refund amount exceeds the received amount");
-          }
-          if (totalPaid === customerAccount.totalAmount) {
-            customerAccount.cosPaymentStatus = "Fully Refunded";
-          } else {
-            customerAccount.cosPaymentStatus = "Partially Refunded";
-          }
-        } else {
-          if (paymentAmount > totalPaid) {
-            throw new Error("Refund amount exceeds the received amount");
-          }
-          if (
-            customerAccount.receivedAmount +
-              customerAccount.pendingReceivedAmount ===
-            0
-          ) {
-            customerAccount.cosPaymentStatus = "Refunded";
-          } else {
-            customerAccount.cosPaymentStatus = "Partially Refunded";
-          }
-        }
+    }
+    // Update customer account
+    customerAccount.maid = newMaidId;
+    customerAccount.totalAmount = newMaidPrice;
+    if (officeCharges > 0) {
+      customerAccount.officeCharges += parseFloat(officeCharges);
+    }
+    if (transactionType === "Received") {
+      if (
+        customerAccount.receivedAmount +
+          customerAccount.pendingReceivedAmount >=
+        newMaidPrice
+      ) {
+        customerAccount.cosPaymentStatus = "Fully Paid";
+      } else {
+        customerAccount.cosPaymentStatus = "Partially Paid";
       }
+    } else {
+      if (
+        customerAccount.receivedAmount +
+          customerAccount.pendingReceivedAmount ===
+        newMaidPrice
+      ) {
+        customerAccount.cosPaymentStatus = "Refunded";
+      } else {
+        customerAccount.cosPaymentStatus = "Partially Refunded";
+      }
+    }
+    await Promise.all([
+      oldMaid.save({ session }),
+      newMaid.save({ session }),
+      customerAccount.save({ session }),
+      transaction ? transaction.save({ session }) : Promise.resolve(),
+      transactionStaff ? transactionStaff.save({ session }) : Promise.resolve(),
+    ]);
 
-      await customerAccount.save({ session });
-      await receiverOrSenderStaff.save({ session });
-    });
+    await session.commitTransaction();
     res.status(200).json({
-      message: "Payment updated successfully",
+      message:
+        req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)
+          ? "Maid replaced and transaction processed successfully"
+          : "Maid replacement request sent for approval",
+      transaction,
+      customerAccount,
     });
   } catch (error) {
+    await session.abortTransaction();
+    console.error("Error in replaceMaid:", error);
+    res
+      .status(500)
+      .json({ error: "An error occurred while replacing the maid" });
+  } finally {
+    session.endSession();
+  }
+};
+
+exports.updateCustomerPayment = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const {
+      customerId,
+      paymentAmount,
+      paymentMethod,
+      staffAccount,
+      receiverOrSenderId,
+      paymentDate,
+      paymentType, // 'receive' or 'refund'
+    } = req.body;
+    const selectedBank = req.body.selectedBank;
+
+    // Input validation
+    if (!isValidObjectId(customerId)) {
+      return res.status(400).json({ error: "Invalid customer ID" });
+    }
+    if (isNaN(parseFloat(paymentAmount)) || parseFloat(paymentAmount) <= 0) {
+      return res.status(400).json({ error: "Invalid payment amount" });
+    }
+    if (!paymentMethod || typeof paymentMethod !== "string") {
+      return res.status(400).json({ error: "Invalid payment method" });
+    }
+    if (
+      !isValidObjectId(staffAccount) ||
+      !isValidObjectId(receiverOrSenderId)
+    ) {
+      return res.status(400).json({ error: "Invalid staff account ID" });
+    }
+    if (!paymentDate || isNaN(Date.parse(paymentDate))) {
+      return res.status(400).json({ error: "Valid payment date is required" });
+    }
+    if (!["receive", "refund"].includes(paymentType)) {
+      return res.status(400).json({ error: "Invalid payment type" });
+    }
+    // Check for payment proof if user doesn't have full access
+    if (
+      req.staffRoles &&
+      !req.staffRoles.includes(roles.fullAccessOnAccounts) &&
+      !req.file
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Payment proof is required for this transaction" });
+    }
+
+    // Find and validate customer account and staff members
+    const [customerAccount, actionStaff, receiverOrSenderStaff] =
+      await Promise.all([
+        CustomerAccountV2.findById(customerId).session(session),
+        StaffAccount.findById(staffAccount).session(session),
+        StaffAccount.findById(receiverOrSenderId).session(session),
+      ]);
+
+    if (!customerAccount) {
+      await session.abortTransaction();
+      return res.status(400).json({ error: "Customer account not found" });
+    }
+    if (!actionStaff || !receiverOrSenderStaff) {
+      await session.abortTransaction();
+      return res.status(404).json({ error: "Staff account not found" });
+    }
+
+    // Process payment proof if provided
+    let paymentProof;
+    if (req.file) {
+      const uniqueImageName = `${uuidv4()}_${req.file.filename}.webp`;
+      const compressedImagePath = `uploads/images/${uniqueImageName}`;
+      await sharp(req.file.path)
+        .resize({ width: 800 })
+        .webp({ quality: 70 })
+        .toFile(compressedImagePath);
+      paymentProof = compressedImagePath;
+    }
+
+    // Create transaction
+    const transaction = new Transaction({
+      customer: customerAccount._id,
+      amount: parseFloat(paymentAmount),
+      paymentMethod: selectedBank
+        ? `${paymentMethod} (${selectedBank})`
+        : paymentMethod,
+      actionBy: actionStaff._id,
+      date: new Date(paymentDate),
+      [paymentType === "receive" ? "receivedBy" : "sendedBy"]:
+        receiverOrSenderStaff._id,
+      proof: paymentProof,
+      type: paymentType === "receive" ? "Received" : "Sent",
+      status:
+        req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)
+          ? "Approved"
+          : "Pending",
+      description: paymentReason || "No Description provided",
+    });
+
+    await transaction.save({ session });
+
+    // Generate invoice
+    const maid = await Maid.findById(customerAccount.maid).session(session);
+    const invoiceData = await generateInvoice(
+      paymentType === "receive" ? "Additional Payment" : "Refund",
+      maid,
+      customerAccount,
+      transaction,
+      actionStaff,
+      receiverOrSenderStaff
+    );
+    transaction.invoice = {
+      number: invoiceData.invoiceNumber,
+      path: invoiceData.pdfFilePath,
+    };
+    await transaction.save({ session });
+
+    // Update customer account and staff balances
+    customerAccount.transactions.push(transaction._id);
+    receiverOrSenderStaff.transactions.push(transaction._id);
+
+    if (req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)) {
+      if (paymentType === "receive") {
+        customerAccount.receivedAmount += parseFloat(paymentAmount);
+        receiverOrSenderStaff.balance += parseFloat(paymentAmount);
+        receiverOrSenderStaff.totalReceivedAmount += parseFloat(paymentAmount);
+      } else {
+        customerAccount.returnAmount += parseFloat(paymentAmount);
+        customerAccount.receivedAmount -= parseFloat(paymentAmount);
+        receiverOrSenderStaff.balance -= parseFloat(paymentAmount);
+        receiverOrSenderStaff.totalSentAmount += parseFloat(paymentAmount);
+      }
+    } else {
+      if (paymentType === "receive") {
+        customerAccount.pendingReceivedAmount += parseFloat(paymentAmount);
+        receiverOrSenderStaff.pendingReceivedAmount +=
+          parseFloat(paymentAmount);
+      } else {
+        customerAccount.pendingReturnAmount += parseFloat(paymentAmount);
+        receiverOrSenderStaff.pendingSentAmount += parseFloat(paymentAmount);
+        customerAccount.pendingReceivedAmount -= parseFloat(paymentAmount);
+      }
+    }
+
+    // Check if the customer has fully paid (only for 'receive' type)
+    if (paymentType === "receive") {
+      const totalPaid =
+        customerAccount.receivedAmount + customerAccount.pendingReceivedAmount;
+      if (totalPaid >= customerAccount.totalAmount) {
+        customerAccount.cosPaymentStatus = "Fully Paid";
+      } else {
+        customerAccount.cosPaymentStatus = "Partially Paid";
+      }
+    } else if (paymentType === "refund") {
+      if (
+        customerAccount.receivedAmount +
+          customerAccount.pendingReceivedAmount ===
+        0
+      ) {
+        customerAccount.cosPaymentStatus = "Fully Refunded";
+      } else {
+        customerAccount.cosPaymentStatus = "Partially Refunded";
+      }
+    }
+
+    await Promise.all([
+      customerAccount.save({ session }),
+      receiverOrSenderStaff.save({ session }),
+    ]);
+
+    await session.commitTransaction();
+    res.status(200).json({
+      message:
+        req.staffRoles && req.staffRoles.includes(roles.fullAccessOnAccounts)
+          ? `Payment ${
+              paymentType === "receive" ? "received" : "refunded"
+            } successfully`
+          : `Payment ${
+              paymentType === "receive" ? "receive" : "refund"
+            } request sent for approval`,
+      transaction,
+      customerAccount,
+    });
+  } catch (error) {
+    await session.abortTransaction();
     console.error("Error in updateCustomerPayment:", error);
-    res.status(400).json({
-      error: error.message || "An error occurred while updating the payment",
+    res.status(500).json({
+      error: "An error occurred while processing the payment update",
     });
   } finally {
-    if (session) {
-      session.endSession();
-    }
+    session.endSession();
   }
 };
 
@@ -715,7 +980,7 @@ exports.handlePendingTransaction = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { transactionId, action } = req.body;
+    const { transactionId, action, reason } = req.body;
 
     // Input validation
     if (!isValidObjectId(transactionId)) {
@@ -724,7 +989,12 @@ exports.handlePendingTransaction = async (req, res) => {
     if (!["approve", "decline"].includes(action)) {
       return res.status(400).json({ error: "Invalid action" });
     }
-    
+    if (action === "decline" && (!reason || typeof reason !== "string")) {
+      return res.status(400).json({
+        error: "Valid Reason is required for declining a transaction",
+      });
+    }
+
     // Check if the user has the necessary permissions
     if (
       !req.staffRoles ||
@@ -785,7 +1055,8 @@ exports.handlePendingTransaction = async (req, res) => {
       }
     } else {
       // Decline the transaction
-      transaction.status = "Rejected";
+      transaction.status = "Declined";
+      transaction.declineReason = reason;
 
       // Remove pending amounts
       if (transaction.type === "Received") {
@@ -814,7 +1085,7 @@ exports.handlePendingTransaction = async (req, res) => {
             customerAccount.pendingReceivedAmount ===
           0
         ) {
-          customerAccount.cosPaymentStatus = "Refunded";
+          customerAccount.cosPaymentStatus = "Fully Refunded";
         } else {
           customerAccount.cosPaymentStatus = "Partially Refunded";
         }
@@ -984,7 +1255,7 @@ exports.editTransaction = async (req, res) => {
           customerAccount.pendingReceivedAmount ===
         0
       ) {
-        customerAccount.cosPaymentStatus = "Refunded";
+        customerAccount.cosPaymentStatus = "Fully Refunded";
       } else {
         customerAccount.cosPaymentStatus = "Partially Refunded";
       }
