@@ -353,11 +353,140 @@ exports.getStaffTransactionsSummary = async (req, res) => {
       },
     };
 
-    for (const bank in summary.received.Bank.details) {
-      summary.remaining.Bank.details[bank] =
-        (summary.received.Bank.details[bank] || 0) -
-        (summary.sent.Bank.details[bank] || 0);
+    // Combine all bank names from both received and sent
+    const allBanks = new Set([
+      ...Object.keys(summary.received.Bank.details),
+      ...Object.keys(summary.sent.Bank.details),
+    ]);
+
+    // Calculate remaining for each bank
+    allBanks.forEach((bank) => {
+      const receivedAmount = summary.received.Bank.details[bank] || 0;
+      const sentAmount = summary.sent.Bank.details[bank] || 0;
+      summary.remaining.Bank.details[bank] = receivedAmount - sentAmount;
+    });
+
+    summary.totalBalance = staffAccount.balance;
+
+    res.status(200).json(summary);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ error: "An error occurred", details: error.message });
+  }
+};
+
+exports.getMyTransactionsSummary = async (req, res) => {
+  try {
+    const staffId = req.staffAccountId;
+
+    const staffAccount = await StaffAccount.findById(staffId);
+
+    if (!staffAccount) {
+      return res.status(404).json({ error: "Account not found for Staff ID" });
     }
+
+    const transactions = await Transaction.find({
+      $or: [{ receivedBy: staffAccount._id }, { sendedBy: staffAccount._id }],
+    }).populate("customer", "customerName uniqueCode");
+
+    const summary = {
+      staffId: staffAccount.staffId,
+      staffName: staffAccount.staffName,
+      received: {
+        Cash: 0,
+        Cheque: 0,
+        Bank: {
+          totalAmount: 0,
+          details: {},
+        },
+      },
+      sent: {
+        Cash: 0,
+        Cheque: 0,
+        Bank: {
+          totalAmount: 0,
+          details: {},
+        },
+      },
+      pending: {
+        received: 0,
+        sent: 0,
+      },
+      approved: {
+        received: 0,
+        sent: 0,
+      },
+      rejected: {
+        received: 0,
+        sent: 0,
+      },
+    };
+
+    transactions.forEach((transaction) => {
+      const { type, paymentMethod, amount, status } = transaction;
+
+      if (type === "Received") {
+        if (status === "Pending") summary.pending.received += amount;
+        else if (status === "Approved") summary.approved.received += amount;
+        else if (status === "Rejected") summary.rejected.received += amount;
+
+        if (status === "Approved") {
+          if (paymentMethod === "Cash") {
+            summary.received.Cash += amount;
+          } else if (paymentMethod === "Cheque") {
+            summary.received.Cheque += amount;
+          } else if (paymentMethod.includes("Bank Transfer")) {
+            const bankName = paymentMethod.split("(")[1].split(")")[0];
+            summary.received.Bank.totalAmount += amount;
+            summary.received.Bank.details[bankName] =
+              (summary.received.Bank.details[bankName] || 0) + amount;
+          }
+        }
+      } else if (type === "Sent") {
+        if (status === "Pending") summary.pending.sent += amount;
+        else if (status === "Approved") summary.approved.sent += amount;
+        else if (status === "Rejected") summary.rejected.sent += amount;
+
+        if (status === "Approved") {
+          if (paymentMethod === "Cash") {
+            summary.sent.Cash += amount;
+          } else if (paymentMethod === "Cheque") {
+            summary.sent.Cheque += amount;
+          } else if (paymentMethod.includes("Bank Transfer")) {
+            const bankName = paymentMethod.split("(")[1].split(")")[0];
+            summary.sent.Bank.totalAmount += amount;
+            summary.sent.Bank.details[bankName] =
+              (summary.sent.Bank.details[bankName] || 0) + amount;
+          }
+        }
+      }
+    });
+
+    // Calculate remaining balances
+    summary.remaining = {
+      Cash: summary.received.Cash - summary.sent.Cash,
+      Cheque: summary.received.Cheque - summary.sent.Cheque,
+      Bank: {
+        totalAmount:
+          summary.received.Bank.totalAmount - summary.sent.Bank.totalAmount,
+        details: {},
+      },
+    };
+
+    // Combine all bank names from both received and sent
+    const allBanks = new Set([
+      ...Object.keys(summary.received.Bank.details),
+      ...Object.keys(summary.sent.Bank.details),
+    ]);
+
+    // Calculate remaining for each bank
+    allBanks.forEach((bank) => {
+      const receivedAmount = summary.received.Bank.details[bank] || 0;
+      const sentAmount = summary.sent.Bank.details[bank] || 0;
+      summary.remaining.Bank.details[bank] = receivedAmount - sentAmount;
+    });
 
     summary.totalBalance = staffAccount.balance;
 

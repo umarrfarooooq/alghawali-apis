@@ -70,8 +70,15 @@ router.get(
 router.get(
   "/staff/:staffId/summary",
   verifyStaffToken,
-  checkPermission(roles.canAccessOnAccounts),
+  checkPermission(roles.fullAccessOnAccounts),
   transactionController.getStaffTransactionsSummary
+);
+
+router.get(
+  "/my/summary",
+  verifyStaffToken,
+  checkPermission(roles.canAccessOnAccounts),
+  transactionController.getMyTransactionsSummary
 );
 
 router.get(

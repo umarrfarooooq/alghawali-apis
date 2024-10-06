@@ -156,7 +156,8 @@ exports.createHiringOrTrial = async (req, res) => {
     let monthlyHireStartDate, monthlyHireEndDate;
 
     if (isTrial) {
-      if(!trialDuration) return res.status(400).json({error: "Trial duration is required"})
+      if (!trialDuration)
+        return res.status(400).json({ error: "Trial duration is required" });
       trialStartDate = new Date(hiringDate);
       const trialDurationMilliseconds = trialDuration * 24 * 60 * 60 * 1000;
       trialEndDate = new Date(
@@ -164,7 +165,10 @@ exports.createHiringOrTrial = async (req, res) => {
       );
       trialStatus = "Active";
     } else if (isMonthlyHiring) {
-      if(!monthlyHiringDuration) return res.status(400).json({error: "Monthly hiring duration is required"})
+      if (!monthlyHiringDuration)
+        return res
+          .status(400)
+          .json({ error: "Monthly hiring duration is required" });
       monthlyHireStartDate = new Date(hiringDate);
       const daysPerMonth = 30;
       const totalDays = parseFloat(monthlyHiringDuration) * daysPerMonth;
@@ -724,7 +728,7 @@ exports.handlePendingTransaction = async (req, res) => {
     if (!["approve", "decline"].includes(action)) {
       return res.status(400).json({ error: "Invalid action" });
     }
-    
+
     // Check if the user has the necessary permissions
     if (
       !req.staffRoles ||
@@ -849,186 +853,208 @@ exports.handlePendingTransaction = async (req, res) => {
 };
 
 exports.editTransaction = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
+  let session;
   try {
-    const { transactionId, ...updateFields } = req.body;
+    session = await mongoose.startSession();
 
-    // Check if the user has the necessary permissions
-    if (
-      !req.staffRoles ||
-      !req.staffRoles.includes(roles.fullAccessOnAccounts)
-    ) {
-      return res
-        .status(403)
-        .json({ error: "You don't have permission to edit transactions" });
-    }
+    await session.withTransaction(async () => {
+      const { transactionId, ...updateFields } = req.body;
 
-    // Input validation
-    if (!isValidObjectId(transactionId)) {
-      return res.status(400).json({ error: "Invalid transaction ID" });
-    }
+      if (!isValidObjectId(transactionId)) {
+        throw new Error("Invalid transaction ID");
+      }
 
-    // Find the transaction
-    const transaction = await Transaction.findById(transactionId).session(
-      session
-    );
-    if (!transaction) {
-      await session.abortTransaction();
-      return res.status(404).json({ error: "Transaction not found" });
-    }
+      const transaction = await Transaction.findById(transactionId).session(
+        session
+      );
+      if (!transaction) {
+        throw new Error("Transaction not found");
+      }
 
-    // Check if the transaction is declined
-    if (transaction.status === "Declined") {
-      await session.abortTransaction();
-      return res
-        .status(400)
-        .json({ error: "Declined transactions cannot be edited" });
-    }
+      if (transaction.status === "Rejected") {
+        throw new Error("Rejected transactions cannot be edited");
+      }
 
-    // Find related documents
-    const [customerAccount, staffAccount] = await Promise.all([
-      CustomerAccountV2.findById(transaction.customer).session(session),
-      StaffAccount.findById(
-        transaction.type === "Received"
-          ? transaction.receivedBy
-          : transaction.sendedBy
-      ).session(session),
-    ]);
+      const customerAccount = await CustomerAccountV2.findById(
+        transaction.customer
+      ).session(session);
+      if (!customerAccount) {
+        throw new Error("Customer account not found");
+      }
 
-    if (!customerAccount || !staffAccount) {
-      await session.abortTransaction();
-      return res.status(404).json({ error: "Related accounts not found" });
-    }
+      let oldStaffAccount, newStaffAccount;
+      if (transaction.type === "Received") {
+        oldStaffAccount = await StaffAccount.findById(
+          transaction.receivedBy
+        ).session(session);
+        newStaffAccount = updateFields.receivedBy
+          ? await StaffAccount.findById(updateFields.receivedBy).session(
+              session
+            )
+          : oldStaffAccount;
+      } else {
+        oldStaffAccount = await StaffAccount.findById(
+          transaction.sendedBy
+        ).session(session);
+        newStaffAccount = updateFields.sendedBy
+          ? await StaffAccount.findById(updateFields.sendedBy).session(session)
+          : oldStaffAccount;
+      }
 
-    if (req.file) {
-      if (transaction.proof) {
-        try {
-          await fs.unlink(transaction.proof);
-        } catch (unlinkError) {
-          console.error("Error deleting old proof image:", unlinkError);
+      if (!oldStaffAccount || !newStaffAccount) {
+        throw new Error("Staff account not found");
+      }
+
+      // Handle file upload
+      if (req.file) {
+        if (transaction.proof) {
+          try {
+            await fs.unlink(transaction.proof);
+          } catch (unlinkError) {
+            console.error("Error deleting old proof image:", unlinkError);
+          }
+        }
+        const uniqueImageName = `${uuidv4()}_${req.file.originalname}.webp`;
+        const compressedImagePath = `uploads/images/${uniqueImageName}`;
+
+        await sharp(req.file.buffer)
+          .resize({ width: 800 })
+          .webp({ quality: 70 })
+          .toFile(compressedImagePath);
+
+        transaction.proof = compressedImagePath;
+      }
+
+      // Update transaction details
+      const validFields = [
+        "paymentMethod",
+        "date",
+        "description",
+        "receivedBy",
+        "sendedBy",
+      ];
+      validFields.forEach((field) => {
+        if (updateFields[field] !== undefined) {
+          transaction[field] = updateFields[field];
+        }
+      });
+
+      // Calculate the difference in amount if amount is provided
+      let amountDifference = 0;
+      
+      const oldAmount = transaction.amount;
+      const newAmount =
+        updateFields.amount !== undefined
+          ? parseFloat(updateFields.amount)
+          : oldAmount;
+
+      if (updateFields.amount !== undefined) {
+        amountDifference = newAmount - oldAmount;
+        transaction.amount = newAmount;
+      }
+
+      // Handle approved transactions
+      if (transaction.status === "Approved") {
+        if (transaction.type === "Received") {
+          customerAccount.receivedAmount += amountDifference;
+          oldStaffAccount.balance -= oldAmount;
+          oldStaffAccount.totalReceivedAmount -= oldAmount;
+          newStaffAccount.balance += newAmount;
+          newStaffAccount.totalReceivedAmount += newAmount;
+        } else {
+          // "Sent"
+          customerAccount.receivedAmount -= amountDifference;
+          customerAccount.returnAmount += amountDifference;
+          oldStaffAccount.balance += oldAmount;
+          oldStaffAccount.totalSentAmount -= oldAmount;
+          newStaffAccount.balance -= newAmount;
+          newStaffAccount.totalSentAmount += newAmount;
         }
       }
-      const uniqueImageName = `${uuidv4()}_${req.file.originalname}.webp`;
-      const compressedImagePath = `uploads/images/${uniqueImageName}`;
-
-      await sharp(req.file.buffer)
-        .resize({ width: 800 })
-        .webp({ quality: 70 })
-        .toFile(compressedImagePath);
-
-      transaction.proof = compressedImagePath;
-    }
-    // Update transaction details
-    const validFields = [
-      "amount",
-      "paymentMethod",
-      "date",
-      "description",
-      "receivedBy",
-      "sendedBy",
-    ];
-    validFields.forEach((field) => {
-      if (updateFields[field] !== undefined) {
-        transaction[field] = updateFields[field];
+      // Handle pending transactions
+      else if (transaction.status === "Pending") {
+        if (transaction.type === "Received") {
+          customerAccount.pendingReceivedAmount += amountDifference;
+          oldStaffAccount.pendingReceivedAmount -= oldAmount;
+          newStaffAccount.pendingReceivedAmount += newAmount;
+        } else {
+          // "Sent"
+          customerAccount.pendingReceivedAmount -= amountDifference;
+          customerAccount.pendingReturnAmount += amountDifference;
+          oldStaffAccount.pendingSentAmount -= oldAmount;
+          newStaffAccount.pendingSentAmount += newAmount;
+        }
       }
+
+      // Update customer payment status
+      if (transaction.type === "Received") {
+        if (
+          customerAccount.receivedAmount +
+            customerAccount.pendingReceivedAmount >=
+          customerAccount.totalAmount
+        ) {
+          customerAccount.cosPaymentStatus = "Fully Paid";
+        } else {
+          customerAccount.cosPaymentStatus = "Partially Paid";
+        }
+      } else {
+        if (
+          customerAccount.receivedAmount +
+            customerAccount.pendingReceivedAmount ===
+          0
+        ) {
+          customerAccount.cosPaymentStatus = "Refunded";
+        } else {
+          customerAccount.cosPaymentStatus = "Partially Refunded";
+        }
+      }
+
+      // Regenerate invoice
+      const maid = await Maid.findById(customerAccount.maid).session(session);
+      const actionStaff = await StaffAccount.findById(
+        transaction.actionBy
+      ).session(session);
+      const invoiceData = await generateInvoice(
+        transaction.type === "Received" ? "Edit Payment" : "Edit Refund",
+        maid,
+        customerAccount,
+        transaction,
+        actionStaff,
+        newStaffAccount
+      );
+      transaction.invoice = {
+        number: invoiceData.invoiceNumber,
+        path: invoiceData.pdfFilePath,
+      };
+
+      // Save all changes
+      await Promise.all([
+        transaction.save({ session }),
+        customerAccount.save({ session }),
+        oldStaffAccount.save({ session }),
+        newStaffAccount.save({ session }),
+      ]);
+
+      // Return the updated data
+      return {
+        message: "Transaction edited successfully",
+        transaction,
+        customerAccount,
+        oldStaffAccount,
+        newStaffAccount,
+      };
     });
 
-    // Calculate the difference in amount if amount is provided
-    let amountDifference = 0;
-    if (updateFields.amount !== undefined) {
-      amountDifference = parseFloat(updateFields.amount) - transaction.amount;
-      transaction.amount = parseFloat(updateFields.amount);
-    }
-
-    // Handle approved transactions
-    if (transaction.status === "Approved") {
-      if (transaction.type === "Received") {
-        customerAccount.receivedAmount += amountDifference;
-        staffAccount.balance += amountDifference;
-        staffAccount.totalReceivedAmount += amountDifference;
-      } else {
-        // "Sent"
-        customerAccount.returnAmount += amountDifference;
-        staffAccount.balance -= amountDifference;
-        staffAccount.totalSentAmount += amountDifference;
-      }
-    }
-    // Handle pending transactions
-    else if (transaction.status === "Pending") {
-      if (transaction.type === "Received") {
-        customerAccount.pendingReceivedAmount += amountDifference;
-        staffAccount.pendingReceivedAmount += amountDifference;
-      } else {
-        // "Sent"
-        customerAccount.pendingReturnAmount += amountDifference;
-        staffAccount.pendingSentAmount += amountDifference;
-      }
-    }
-
-    // Update customer payment status
-    if (transaction.type === "Received") {
-      if (
-        customerAccount.receivedAmount +
-          customerAccount.pendingReceivedAmount >=
-        customerAccount.totalAmount
-      ) {
-        customerAccount.cosPaymentStatus = "Fully Paid";
-      } else {
-        customerAccount.cosPaymentStatus = "Partially Paid";
-      }
-    } else {
-      if (
-        customerAccount.receivedAmount +
-          customerAccount.pendingReceivedAmount ===
-        0
-      ) {
-        customerAccount.cosPaymentStatus = "Refunded";
-      } else {
-        customerAccount.cosPaymentStatus = "Partially Refunded";
-      }
-    }
-
-    // Regenerate invoice
-    const maid = await Maid.findById(customerAccount.maid).session(session);
-    const actionStaff = await StaffAccount.findById(
-      transaction.actionBy
-    ).session(session);
-    const invoiceData = await generateInvoice(
-      transaction.type === "Received" ? "Edit Payment" : "Edit Refund",
-      maid,
-      customerAccount,
-      transaction,
-      actionStaff,
-      staffAccount
-    );
-    transaction.invoice = {
-      number: invoiceData.invoiceNumber,
-      path: invoiceData.pdfFilePath,
-    };
-
-    // Save all changes
-    await Promise.all([
-      transaction.save({ session }),
-      customerAccount.save({ session }),
-      staffAccount.save({ session }),
-    ]);
-
-    await session.commitTransaction();
-    res.status(200).json({
-      message: "Transaction edited successfully",
-      transaction,
-      customerAccount,
-      staffAccount,
-    });
+    // If we reach here, the transaction was successful
+    res.status(200).json({ message: "Transaction edited successfully" });
   } catch (error) {
-    await session.abortTransaction();
     console.error("Error in editTransaction:", error);
-    res.status(500).json({
-      error: "An error occurred while editing the transaction",
+    res.status(400).json({
+      error: error.message || "An error occurred while editing the payment",
     });
   } finally {
-    session.endSession();
+    if (session) {
+      session.endSession();
+    }
   }
 };
