@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <script src="https://cdn.tailwindcss.com"></script>
+      <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/public/invoice.css" />
   </head>
   <style>
@@ -213,7 +213,7 @@
         <div
           class="grow shrink font-semibold basis-0 text-center text-white text-7xl  uppercase leading-[100.80px] tracking-wider"
         >
-        <%= invoiceType %> INVOICE 
+        INVOICE 
         </div>
       </div>
       <div
@@ -416,7 +416,15 @@
                   <div
                     class="grow shrink basis-0 font-semibold text-[#252e31] text-[40px]  leading-[56px] tracking-wide"
                   >
-                  <%= customerData.totalAmount - transactionData.amount %>
+                  <% const totalPaidAmount = customerData.receivedAmount + customerData.pendingReceivedAmount %>
+                  <% const totalReturnAmount = customerData.returnAmount + customerData.pendingReturnAmount %>
+                  <% if (customerData.profileHiringStatus === "Return") { %>
+                    <%= totalPaidAmount %>
+                  <% } else if (totalPaidAmount > customerData.totalAmount) { %>
+                    <%= totalPaidAmount - customerData.totalAmount %>
+                  <% } else { %>
+                    <%= customerData.totalAmount - totalPaidAmount %>
+                  <% } %>
                   </div>
                 </div>
               </div>
@@ -575,19 +583,6 @@
             </div>
           </div>
         </div>
-      </div>
-      <div class="self-stretch">
-        <span
-          class="text-[#252e31] text-[40px] font-bold  leading-[56px] tracking-wide"
-          >Trail Terms :</span
-        ><span
-          class="text-[#ff4646] text-[40px] font-normal  leading-[56px] tracking-wide"
-        >
-          The Trail Periods is of 4 days, Which will cost the sponsor 5 OMR per
-          day, Incase of returning the worker after 4 days will be charged 20
-          OMR per Day. The representative must be inform if the worker is
-          finalized by sponsor.</span
-        >
       </div>
       <div
         class="self-stretch h-[435px] p-8 bg-white flex-col justify-start items-start gap-4 flex"

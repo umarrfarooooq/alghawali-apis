@@ -53,8 +53,8 @@ exports.getMyAllPendingTransactions = async (req, res) => {
   try {
     const transactions = await Transaction.find({
       $or: [
-        { receivedBy: req.staffAccountId, status: "Pending" },
-        { sendedBy: req.staffAccountId, status: "Pending" },
+        { receivedBy: req.staffAccountId, status: "Pending", type: "Received" },
+        { sendedBy: req.staffAccountId, status: "Pending", type: "Sent" },
       ],
     }).populate(populateTransaction());
 
@@ -70,8 +70,8 @@ exports.getMyAllRecentTransactions = async (req, res) => {
   try {
     const transactions = await Transaction.find({
       $or: [
-        { receivedBy: req.staffAccountId },
-        { sendedBy: req.staffAccountId },
+        { receivedBy: req.staffAccountId, type: "Received" },
+        { sendedBy: req.staffAccountId, type: "Sent" },
       ],
     })
       .sort({ date: -1 })
@@ -137,8 +137,8 @@ exports.getStaffTransactions = async (req, res) => {
     const transactions = await Transaction.find({
       $or: [
         { actionBy: staffId },
-        { receivedBy: staffId },
-        { sendedBy: staffId },
+        { receivedBy: staffId, type: "Received" },
+        { sendedBy: staffId, type: "Sent" },
       ],
     })
       .sort(sortOptions)
@@ -203,8 +203,8 @@ exports.getMyTransactions = async (req, res) => {
     const transactions = await Transaction.find({
       $or: [
         { actionBy: staffId },
-        { receivedBy: staffId },
-        { sendedBy: staffId },
+        { receivedBy: staffId, type: "Received" },
+        { sendedBy: staffId, type: "Sent" },
       ],
     })
       .sort(sortOptions)
@@ -266,7 +266,10 @@ exports.getStaffTransactionsSummary = async (req, res) => {
     }
 
     const transactions = await Transaction.find({
-      $or: [{ receivedBy: staffAccount._id }, { sendedBy: staffAccount._id }],
+      $or: [
+        { receivedBy: staffAccount._id, type: "Received" },
+        { sendedBy: staffAccount._id, type: "Sent" },
+      ],
     }).populate("customer", "customerName uniqueCode");
 
     const summary = {
@@ -388,7 +391,10 @@ exports.getMyTransactionsSummary = async (req, res) => {
     }
 
     const transactions = await Transaction.find({
-      $or: [{ receivedBy: staffAccount._id }, { sendedBy: staffAccount._id }],
+      $or: [
+        { receivedBy: staffAccount._id, type: "Received" },
+        { sendedBy: staffAccount._id, type: "Sent" },
+      ],
     }).populate("customer", "customerName uniqueCode");
 
     const summary = {

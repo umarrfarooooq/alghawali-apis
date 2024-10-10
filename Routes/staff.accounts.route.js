@@ -91,7 +91,7 @@ router.post(
 );
 router.post(
   "/transfer-amount",
-  upload.single("paymentProof"),
+  upload.single("proof"),
   verifyStaffToken,
   checkPermission(roles.canAccessOnAccounts || roles.fullAccessOnAccounts),
   staffAccountController.transferAmount

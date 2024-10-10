@@ -4,6 +4,7 @@ const Transaction = require("../Models/Transaction");
 const StaffAccount = require("../Models/staffAccounts");
 const roles = require("../config/roles");
 const moment = require("moment");
+const mongoose = require("mongoose");
 
 function generateUniqueCode() {
   const uniqueCodeLength = 6;
@@ -180,75 +181,223 @@ exports.getAccountDetailsById = async (req, res) => {
   }
 };
 
+// exports.transferAmount = async (req, res) => {
+//   try {
+//     const { senderId, receiverId, amount, paymentMethod } = req.body;
+//     const selectedBank = req.body.selectedBank;
+//     let paySlip;
+//     const senderAccount = await StaffAccount.findOne({ staffId: senderId });
+//     if (!senderAccount) {
+//       return res.status(404).json({ error: "Sender account not found" });
+//     }
+
+//     const receiverAccount = await StaffAccount.findOne({
+//       staffCode: receiverId,
+//     });
+//     if (!receiverAccount) {
+//       return res.status(404).json({ error: "Receiver account not found" });
+//     }
+
+//     if (senderAccount.balance < amount) {
+//       return res.status(400).json({ error: "Insufficient Balance" });
+//     }
+
+//     if (req.file) {
+//       paySlip = req.file.path;
+//     }
+
+//     if (!paySlip) {
+//       return res
+//         .status(400)
+//         .json({ error: "Cannot proceed without payment proof" });
+//     }
+
+//     senderAccount.balance -= parseFloat(amount);
+//     senderAccount.totalSentAmount += parseFloat(amount);
+
+//     receiverAccount.balance += parseFloat(amount);
+//     receiverAccount.totalReceivedAmount += parseFloat(amount);
+
+//     const senderTransaction = {
+//       amount: parseFloat(amount),
+//       paymentMethod: selectedBank
+//         ? `${paymentMethod} (${selectedBank})`
+//         : paymentMethod,
+//       transferTo: receiverAccount.staffName,
+//       type: "Sent",
+//       proof: paySlip,
+//     };
+
+//     const receiverTransaction = {
+//       amount: parseFloat(amount),
+//       paymentMethod: selectedBank
+//         ? `${paymentMethod} (${selectedBank})`
+//         : paymentMethod,
+//       receivedFrom: senderAccount.staffName,
+//       type: "Received",
+//       proof: paySlip,
+//     };
+
+//     senderAccount.transferHistory.push(senderTransaction);
+//     receiverAccount.transferHistory.push(receiverTransaction);
+
+//     await senderAccount.save();
+//     await receiverAccount.save();
+
+//     res.status(200).json({ message: "Amount transferred successfully" });
+//   } catch (error) {
+//     console.error(error);
+//     res
+//       .status(500)
+//       .json({ error: "An error occurred while transferring amount" });
+//   }
+// };
+
 exports.transferAmount = async (req, res) => {
+  const session = await mongoose.startSession();
+
   try {
-    const { senderId, receiverId, amount, paymentMethod } = req.body;
-    const selectedBank = req.body.selectedBank;
-    let paySlip;
-    const senderAccount = await StaffAccount.findOne({ staffId: senderId });
-    if (!senderAccount) {
-      return res.status(404).json({ error: "Sender account not found" });
-    }
+    const result = await session.withTransaction(async () => {
+      const {
+        receiverId,
+        amount,
+        date,
+        paymentMethod,
+        selectedBank,
+        description,
+      } = req.body;
+      const senderId = req.staffAccountId;
+      let paySlip;
 
-    const receiverAccount = await StaffAccount.findOne({
-      staffCode: receiverId,
+      if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+        throw new Error("Invalid amount");
+      }
+
+      if (!paymentMethod) {
+        throw new Error("Payment method is required");
+      }
+      if (!date) {
+        throw new Error("Date is required");
+      }
+
+      if (paymentMethod.toLowerCase() === "bank transfer" && !selectedBank) {
+        throw new Error("Selected bank is required for bank transfers");
+      }
+
+      if (senderId === receiverId) {
+        throw new Error("You cannot transfer to yourself");
+      }
+
+      const senderAccount = await StaffAccount.findById(senderId).session(
+        session
+      );
+      if (!senderAccount) {
+        throw new Error("Sender account not found");
+      }
+
+      const receiverAccount = await StaffAccount.findById(receiverId).session(
+        session
+      );
+      if (!receiverAccount) {
+        throw new Error("Receiver account not found");
+      }
+
+      if (senderAccount.balance < amount) {
+        throw new Error("Insufficient Balance");
+      }
+
+      if (
+        req.staffRoles &&
+        !req.staffRoles.includes(roles.fullAccessOnAccounts) &&
+        !req.file
+      ) {
+        throw new Error("Cannot proceed without payment proof");
+      }
+
+      if (req.file) {
+        paySlip = req.file.path;
+      }
+
+      const parsedAmount = parseFloat(amount);
+      const needsApproval = !req.staffRoles.includes(
+        roles.fullAccessOnAccounts
+      );
+      const transferId = new mongoose.Types.ObjectId();
+      const transactionData = {
+        customer: null,
+        amount: parsedAmount,
+        paymentMethod: selectedBank
+          ? `${paymentMethod} (${selectedBank})`
+          : paymentMethod,
+        date: date,
+        actionBy: senderId,
+        receivedBy: receiverAccount._id,
+        sendedBy: senderAccount._id,
+        proof: paySlip,
+        staffTransfer: true,
+        status: needsApproval ? "Pending" : "Approved",
+        transferId: transferId,
+        description:
+          description ||
+          `Transfer between ${senderAccount.staffName} and ${receiverAccount.staffName}`,
+      };
+
+      const senderTransaction = new Transaction({
+        ...transactionData,
+        type: "Sent",
+      });
+
+      const receiverTransaction = new Transaction({
+        ...transactionData,
+        type: "Received",
+      });
+
+      await senderTransaction.save({ session });
+      await receiverTransaction.save({ session });
+
+      if (!needsApproval) {
+        senderAccount.balance -= parsedAmount;
+        senderAccount.totalSentAmount += parsedAmount;
+        receiverAccount.balance += parsedAmount;
+        receiverAccount.totalReceivedAmount += parsedAmount;
+      } else {
+        senderAccount.pendingSentAmount += parsedAmount;
+        receiverAccount.pendingReceivedAmount += parsedAmount;
+      }
+
+      senderAccount.transactions.push(senderTransaction._id);
+      receiverAccount.transactions.push(receiverTransaction._id);
+
+      await senderAccount.save({ session });
+      await receiverAccount.save({ session });
+
+      return {
+        senderTransactionId: senderTransaction._id,
+        receiverTransactionId: receiverTransaction._id,
+        needsApproval,
+      };
     });
-    if (!receiverAccount) {
-      return res.status(404).json({ error: "Receiver account not found" });
+
+    if (result) {
+      const message = result.needsApproval
+        ? "Transfer request submitted for approval"
+        : "Amount transferred successfully";
+      res.status(200).json({
+        message,
+        senderTransactionId: result.senderTransactionId,
+        receiverTransactionId: result.receiverTransactionId,
+        needsApproval: result.needsApproval,
+      });
+    } else {
+      res.status(500).json({ error: "Transaction failed" });
     }
-
-    if (senderAccount.balance < amount) {
-      return res.status(400).json({ error: "Insufficient Balance" });
-    }
-
-    if (req.file) {
-      paySlip = req.file.path;
-    }
-
-    if (!paySlip) {
-      return res
-        .status(400)
-        .json({ error: "Cannot proceed without payment proof" });
-    }
-
-    senderAccount.balance -= parseFloat(amount);
-    senderAccount.totalSentAmount += parseFloat(amount);
-
-    receiverAccount.balance += parseFloat(amount);
-    receiverAccount.totalReceivedAmount += parseFloat(amount);
-
-    const senderTransaction = {
-      amount: parseFloat(amount),
-      paymentMethod: selectedBank
-        ? `${paymentMethod} (${selectedBank})`
-        : paymentMethod,
-      transferTo: receiverAccount.staffName,
-      type: "Sent",
-      proof: paySlip,
-    };
-
-    const receiverTransaction = {
-      amount: parseFloat(amount),
-      paymentMethod: selectedBank
-        ? `${paymentMethod} (${selectedBank})`
-        : paymentMethod,
-      receivedFrom: senderAccount.staffName,
-      type: "Received",
-      proof: paySlip,
-    };
-
-    senderAccount.transferHistory.push(senderTransaction);
-    receiverAccount.transferHistory.push(receiverTransaction);
-
-    await senderAccount.save();
-    await receiverAccount.save();
-
-    res.status(200).json({ message: "Amount transferred successfully" });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({ error: "An error occurred while transferring amount" });
+    res.status(400).json({
+      error: error.message || "An error occurred while transferring amount",
+    });
+  } finally {
+    session.endSession();
   }
 };
 

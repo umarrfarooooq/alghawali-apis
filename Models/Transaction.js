@@ -10,6 +10,8 @@ const transactionSchema = new mongoose.Schema({
   sendedBy: { type: mongoose.Schema.Types.ObjectId, ref: "StaffAccount" },
   proof: { type: String },
   type: { type: String, enum: ["Received", "Sent"] },
+  staffTransfer: { type: Boolean, default: false },
+  transferId: { type: mongoose.Schema.Types.ObjectId, ref: "Transaction" },
   status: {
     type: String,
     enum: ["Pending", "Approved", "Rejected"],

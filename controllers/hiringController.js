@@ -44,6 +44,10 @@ exports.createHiringOrTrial = async (req, res) => {
       isTrial,
       trialDuration,
       trialAction,
+      salary,
+      passportNumber,
+      customerIdCard,
+      agencyType,
     } = req.body;
     const selectedBank = req.body.selectedBank;
 
@@ -83,6 +87,7 @@ exports.createHiringOrTrial = async (req, res) => {
       return res
         .status(400)
         .json({ error: "Valid payment method is required" });
+
     if (
       !receivedBy ||
       typeof receivedBy !== "string" ||
@@ -99,6 +104,12 @@ exports.createHiringOrTrial = async (req, res) => {
       staffAccount.trim().length === 0
     )
       return res.status(400).json({ error: "Valid staff account is required" });
+
+    if (paymentMethod.toLowerCase() === "bank transfer" && !selectedBank) {
+      return res
+        .status(400)
+        .json({ error: "Selected bank is required for bank transfers" });
+    }
 
     const existingMaid = await Maid.findById(maidId).session(session);
     if (!existingMaid) return res.status(404).json({ error: "Maid not found" });
@@ -132,6 +143,24 @@ exports.createHiringOrTrial = async (req, res) => {
     if (!actionStaffAccount)
       return res.status(404).json({ error: "Your account not found" });
 
+    if (isTrial) {
+      if (!salary || !passportNumber || !customerIdCard) {
+        return res.status(400).json({
+          error:
+            "Salary, passport number, and customer ID card number are required",
+        });
+      }
+    }
+
+    if (isTrial) {
+      if (!agencyType) {
+        return res.status(400).json({ error: "Agency type is required" });
+      }
+      if (agencyType !== "Alghawali" && agencyType !== "Swift") {
+        return res.status(400).json({ error: "Invalid agency type" });
+      }
+    }
+
     let hiringSlip;
     if (req.file) {
       const uniqueImageName = `${uuidv4()}_${req.file.filename}.webp`;
@@ -148,9 +177,10 @@ exports.createHiringOrTrial = async (req, res) => {
       uniqueCode = generateUniqueCode();
     } while (await CustomerAccountV2.findOne({ uniqueCode }).session(session));
 
-    const paymentMethodWithBank = selectedBank
-      ? `${paymentMethod} (${selectedBank})`
-      : paymentMethod;
+    let paymentMethodWithBank = paymentMethod;
+    if (paymentMethod.toLowerCase() === "bank transfer" && selectedBank) {
+      paymentMethodWithBank = `${paymentMethod} (${selectedBank})`;
+    }
 
     let trialStartDate, trialEndDate, trialStatus;
     let monthlyHireStartDate, monthlyHireEndDate;
@@ -223,7 +253,7 @@ exports.createHiringOrTrial = async (req, res) => {
     if (isMonthlyHiring) {
       hiringType = "Monthly";
     } else if (isTrial) {
-      hiringType = "Trial";
+      hiringType = "On Trial";
     } else {
       hiringType = "Hired";
     }
@@ -248,17 +278,6 @@ exports.createHiringOrTrial = async (req, res) => {
 
     await transaction.save({ session });
 
-    const invoiceData = await generateInvoice(
-      hiringType,
-      existingMaid,
-      newCustomerAccount,
-      transaction,
-      actionStaffAccount,
-      existingStaffAccount
-    );
-    transaction.invoice.number = invoiceData.invoiceNumber;
-    transaction.invoice.path = invoiceData.pdfFilePath;
-    await transaction.save({ session });
     newCustomerAccount.transactions.push(transaction._id);
     existingStaffAccount.transactions.push(transaction._id);
 
@@ -270,6 +289,30 @@ exports.createHiringOrTrial = async (req, res) => {
       newCustomerAccount.pendingReceivedAmount += parseFloat(advanceAmount);
       existingStaffAccount.pendingReceivedAmount += parseFloat(advanceAmount);
     }
+
+    // Generate invoice
+    const maidData = {
+      ...existingMaid.toObject(),
+      salary,
+      passportNumber,
+    };
+    const customerData = {
+      ...newCustomerAccount.toObject(),
+      idCardNumber: customerIdCard,
+    };
+    const invoiceData = await generateInvoice(
+      hiringType,
+      maidData,
+      customerData,
+      transaction,
+      actionStaffAccount,
+      existingStaffAccount,
+      agencyType
+    );
+
+    transaction.invoice.number = invoiceData.invoiceNumber;
+    transaction.invoice.path = invoiceData.pdfFilePath;
+    await transaction.save({ session });
 
     await Promise.all([
       existingMaid.save({ session }),
@@ -535,6 +578,9 @@ exports.updateCustomerPayment = async (req, res) => {
       if (!isValidObjectId(customerId)) {
         throw new Error("Invalid customer ID format");
       }
+      if (paymentMethod.toLowerCase() === "bank transfer" && !selectedBank) {
+        throw new Error("Selected bank is required for bank transfers");
+      }
       if (isNaN(parseFloat(paymentAmount)) || parseFloat(paymentAmount) <= 0) {
         throw new Error("Invalid payment amount");
       }
@@ -593,9 +639,10 @@ exports.updateCustomerPayment = async (req, res) => {
       const transaction = new Transaction({
         customer: customerAccount._id,
         amount: parseFloat(paymentAmount),
-        paymentMethod: selectedBank
-          ? `${paymentMethod} (${selectedBank})`
-          : paymentMethod,
+        paymentMethod:
+          paymentMethod.toLowerCase() === "bank transfer" && selectedBank
+            ? `${paymentMethod} (${selectedBank})`
+            : paymentMethod,
         actionBy: actionStaff._id,
         date: new Date(paymentDate),
         [paymentType === "receive" ? "receivedBy" : "sendedBy"]:
@@ -610,26 +657,31 @@ exports.updateCustomerPayment = async (req, res) => {
       });
 
       await transaction.save({ session });
-
-      // Generate invoice
       const maid = await Maid.findById(customerAccount.maid).session(session);
-      const invoiceData = await generateInvoice(
-        paymentType === "receive" ? "Additional Payment" : "Refund",
-        maid,
-        customerAccount,
-        transaction,
-        actionStaff,
-        receiverOrSenderStaff
-      );
-      transaction.invoice = {
-        number: invoiceData.invoiceNumber,
-        path: invoiceData.pdfFilePath,
-      };
-      await transaction.save({ session });
 
-      // Update customer account and staff balances
-      customerAccount.transactions.push(transaction._id);
-      receiverOrSenderStaff.transactions.push(transaction._id);
+      const totalPaid =
+        customerAccount.receivedAmount + customerAccount.pendingReceivedAmount;
+      const totalReturn =
+        customerAccount.returnAmount + customerAccount.pendingReturnAmount;
+
+      if (paymentType === "receive") {
+        if (
+          totalPaid + parseFloat(paymentAmount) >
+          customerAccount.totalAmount
+        ) {
+          throw new Error("Payment amount exceeds the total amount");
+        }
+      } else {
+        if (customerAccount.profileHiringStatus !== "Return") {
+          if (totalReturn + parseFloat(paymentAmount) > totalPaid) {
+            throw new Error("Refund amount exceeds the received amount");
+          }
+        } else {
+          if (totalPaid - parseFloat(paymentAmount) < 0) {
+            throw new Error("Refund amount exceeds the received amount");
+          }
+        }
+      }
 
       if (
         req.staffRoles &&
@@ -658,43 +710,48 @@ exports.updateCustomerPayment = async (req, res) => {
         }
       }
 
-      const totalPaid =
+      const totalPaidAfterPayment =
         customerAccount.receivedAmount + customerAccount.pendingReceivedAmount;
 
       if (paymentType === "receive") {
-        if (totalPaid > customerAccount.totalAmount) {
-          throw new Error("Payment amount exceeds the total amount");
-        }
-        if (totalPaid === customerAccount.totalAmount) {
+        if (totalPaidAfterPayment === customerAccount.totalAmount) {
           customerAccount.cosPaymentStatus = "Fully Paid";
         } else {
           customerAccount.cosPaymentStatus = "Partially Paid";
         }
       } else if (paymentType === "refund") {
         if (customerAccount.profileHiringStatus !== "Return") {
-          if (totalPaid < customerAccount.totalAmount) {
-            throw new Error("Refund amount exceeds the received amount");
-          }
-          if (totalPaid === customerAccount.totalAmount) {
-            customerAccount.cosPaymentStatus = "Fully Refunded";
+          if (totalPaidAfterPayment === customerAccount.totalAmount) {
+            customerAccount.cosPaymentStatus = "Fully Paid";
           } else {
             customerAccount.cosPaymentStatus = "Partially Refunded";
           }
         } else {
-          if (paymentAmount > totalPaid) {
-            throw new Error("Refund amount exceeds the received amount");
-          }
-          if (
-            customerAccount.receivedAmount +
-              customerAccount.pendingReceivedAmount ===
-            0
-          ) {
+          if (totalPaidAfterPayment === 0) {
             customerAccount.cosPaymentStatus = "Refunded";
           } else {
             customerAccount.cosPaymentStatus = "Partially Refunded";
           }
         }
       }
+      // Generate invoice
+      const invoiceData = await generateInvoice(
+        paymentType === "receive" ? "Additional Payment" : "Refund",
+        maid,
+        customerAccount,
+        transaction,
+        actionStaff,
+        receiverOrSenderStaff
+      );
+      transaction.invoice = {
+        number: invoiceData.invoiceNumber,
+        path: invoiceData.pdfFilePath,
+      };
+      await transaction.save({ session });
+
+      // Update customer account and staff balances
+      customerAccount.transactions.push(transaction._id);
+      receiverOrSenderStaff.transactions.push(transaction._id);
 
       await customerAccount.save({ session });
       await receiverOrSenderStaff.save({ session });
@@ -721,116 +778,130 @@ exports.handlePendingTransaction = async (req, res) => {
   try {
     const { transactionId, action } = req.body;
 
-    // Input validation
-    if (!isValidObjectId(transactionId)) {
-      return res.status(400).json({ error: "Invalid transaction ID" });
-    }
-    if (!["approve", "decline"].includes(action)) {
-      return res.status(400).json({ error: "Invalid action" });
-    }
-
-    // Check if the user has the necessary permissions
     if (
-      !req.staffRoles ||
-      !req.staffRoles.includes(roles.fullAccessOnAccounts)
+      !isValidObjectId(transactionId) ||
+      !["approve", "decline"].includes(action)
     ) {
-      return res
-        .status(403)
-        .json({ error: "You don't have permission to perform this action" });
+      return res.status(400).json({ error: "Invalid input" });
     }
 
-    // Find the transaction
+    if (!req.staffRoles?.includes(roles.fullAccessOnAccounts)) {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
+
     const transaction = await Transaction.findById(transactionId).session(
       session
     );
-    if (!transaction) {
+    if (!transaction || transaction.status !== "Pending") {
       await session.abortTransaction();
-      return res.status(404).json({ error: "Transaction not found" });
+      return res
+        .status(404)
+        .json({ error: "Valid pending transaction not found" });
     }
 
-    // Check if the transaction is pending
-    if (transaction.status !== "Pending") {
-      await session.abortTransaction();
-      return res.status(400).json({ error: "This transaction is not pending" });
-    }
+    const isStaffTransfer = transaction.staffTransfer;
+    let senderAccount,
+      receiverAccount,
+      customerAccount,
+      staffAccount,
+      linkedTransaction;
 
-    // Find related documents
-    const [customerAccount, staffAccount] = await Promise.all([
-      CustomerAccountV2.findById(transaction.customer).session(session),
-      StaffAccount.findById(
-        transaction.type === "Received"
-          ? transaction.receivedBy
-          : transaction.sendedBy
-      ).session(session),
-    ]);
-
-    if (!customerAccount || !staffAccount) {
-      await session.abortTransaction();
-      return res.status(404).json({ error: "Related accounts not found" });
-    }
-
-    if (action === "approve") {
-      transaction.status = "Approved";
-      if (transaction.type === "Received") {
-        customerAccount.receivedAmount += transaction.amount;
-        customerAccount.pendingReceivedAmount -= transaction.amount;
-        staffAccount.balance += transaction.amount;
-        staffAccount.totalReceivedAmount += transaction.amount;
-        staffAccount.pendingReceivedAmount -= transaction.amount;
-      } else {
-        // "Sent"
-        customerAccount.returnAmount += transaction.amount;
-        customerAccount.receivedAmount -= transaction.amount;
-        customerAccount.pendingReturnAmount -= transaction.amount;
-        customerAccount.pendingReceivedAmount += transaction.amount;
-        staffAccount.balance -= transaction.amount;
-        staffAccount.totalSentAmount += transaction.amount;
-        staffAccount.pendingSentAmount -= transaction.amount;
+    if (isStaffTransfer) {
+      [senderAccount, receiverAccount, linkedTransaction] = await Promise.all([
+        StaffAccount.findById(transaction.sendedBy).session(session),
+        StaffAccount.findById(transaction.receivedBy).session(session),
+        Transaction.findOne({
+          transferId: transaction.transferId,
+          _id: { $ne: transaction._id },
+          staffTransfer: true,
+        }).session(session),
+      ]);
+      if (!senderAccount || !receiverAccount || !linkedTransaction) {
+        await session.abortTransaction();
+        return res.status(404).json({
+          error: "Related staff accounts or linked transaction not found",
+        });
       }
     } else {
-      // Decline the transaction
-      transaction.status = "Rejected";
-
-      // Remove pending amounts
-      if (transaction.type === "Received") {
-        customerAccount.pendingReceivedAmount -= transaction.amount;
-        staffAccount.pendingReceivedAmount -= transaction.amount;
-      } else {
-        // "Sent"
-        customerAccount.pendingReturnAmount -= transaction.amount;
-        customerAccount.pendingReceivedAmount += transaction.amount;
-        staffAccount.pendingSentAmount -= transaction.amount;
-      }
-
-      if (transaction.type === "Received") {
-        if (
-          customerAccount.receivedAmount +
-            customerAccount.pendingReceivedAmount ===
-          customerAccount.totalAmount
-        ) {
-          customerAccount.cosPaymentStatus = "Fully Paid";
-        } else {
-          customerAccount.cosPaymentStatus = "Partially Paid";
-        }
-      } else {
-        if (
-          customerAccount.receivedAmount +
-            customerAccount.pendingReceivedAmount ===
-          0
-        ) {
-          customerAccount.cosPaymentStatus = "Refunded";
-        } else {
-          customerAccount.cosPaymentStatus = "Partially Refunded";
-        }
+      [customerAccount, staffAccount] = await Promise.all([
+        CustomerAccountV2.findById(transaction.customer).session(session),
+        StaffAccount.findById(
+          transaction.type === "Received"
+            ? transaction.receivedBy
+            : transaction.sendedBy
+        ).session(session),
+      ]);
+      if (!customerAccount || !staffAccount) {
+        await session.abortTransaction();
+        return res.status(404).json({ error: "Related accounts not found" });
       }
     }
 
-    // Save all changes
-    await Promise.all([
-      transaction.save({ session }),
-      customerAccount.save({ session }),
-      staffAccount.save({ session }),
-    ]);
+    const newStatus = action === "approve" ? "Approved" : "Rejected";
+    transaction.status = newStatus;
+    const amount = transaction.amount;
+
+    if (isStaffTransfer) {
+      linkedTransaction.status = newStatus;
+      if (action === "approve") {
+        senderAccount.balance -= amount;
+        senderAccount.totalSentAmount += amount;
+        receiverAccount.balance += amount;
+        receiverAccount.totalReceivedAmount += amount;
+      }
+      senderAccount.pendingSentAmount -= amount;
+      receiverAccount.pendingReceivedAmount -= amount;
+    } else {
+      const isReceived = transaction.type === "Received";
+      if (action === "approve") {
+        if (isReceived) {
+          customerAccount.receivedAmount += amount;
+          staffAccount.balance += amount;
+          staffAccount.totalReceivedAmount += amount;
+        } else {
+          customerAccount.returnAmount += amount;
+          customerAccount.receivedAmount -= amount;
+          staffAccount.balance -= amount;
+          staffAccount.totalSentAmount += amount;
+        }
+      }
+      if (isReceived) {
+        customerAccount.pendingReceivedAmount -= amount;
+        staffAccount.pendingReceivedAmount -= amount;
+      } else {
+        customerAccount.pendingReturnAmount -= amount;
+        customerAccount.pendingReceivedAmount += amount;
+        staffAccount.pendingSentAmount -= amount;
+      }
+
+      const totalReceived =
+        customerAccount.receivedAmount + customerAccount.pendingReceivedAmount;
+      if (totalReceived === customerAccount.totalAmount) {
+        customerAccount.cosPaymentStatus = "Fully Paid";
+      } else if (totalReceived === 0) {
+        customerAccount.cosPaymentStatus = "Refunded";
+      } else if (totalReceived < customerAccount.totalAmount) {
+        customerAccount.cosPaymentStatus = "Partially Paid";
+      } else {
+        customerAccount.cosPaymentStatus = "Partially Refunded";
+      }
+    }
+
+    const savePromises = [transaction.save({ session })];
+    if (isStaffTransfer) {
+      savePromises.push(
+        linkedTransaction.save({ session }),
+        senderAccount.save({ session }),
+        receiverAccount.save({ session })
+      );
+    } else {
+      savePromises.push(
+        customerAccount.save({ session }),
+        staffAccount.save({ session })
+      );
+    }
+
+    await Promise.all(savePromises);
 
     await session.commitTransaction();
     res.status(200).json({
@@ -838,15 +909,14 @@ exports.handlePendingTransaction = async (req, res) => {
         action === "approve" ? "approved" : "declined"
       } successfully`,
       transaction,
-      customerAccount,
-      staffAccount,
+      ...(isStaffTransfer
+        ? { linkedTransaction, senderAccount, receiverAccount }
+        : { customerAccount, staffAccount }),
     });
   } catch (error) {
     await session.abortTransaction();
     console.error("Error in handlePendingTransaction:", error);
-    res.status(500).json({
-      error: "An error occurred while processing the transaction",
-    });
+    res.status(500).json({ error: "Transaction processing failed" });
   } finally {
     session.endSession();
   }
@@ -870,6 +940,9 @@ exports.editTransaction = async (req, res) => {
       if (!transaction) {
         throw new Error("Transaction not found");
       }
+      if (transaction.staffTransfer) {
+        throw new Error("Staff transfer transactions cannot be edited for now");
+      }
 
       if (transaction.status === "Rejected") {
         throw new Error("Rejected transactions cannot be edited");
@@ -883,11 +956,19 @@ exports.editTransaction = async (req, res) => {
       }
 
       let oldStaffAccount, newStaffAccount;
+      const staffChanged =
+        (transaction.type === "Received" &&
+          updateFields.receivedBy &&
+          updateFields.receivedBy !== transaction.receivedBy.toString()) ||
+        (transaction.type === "Sent" &&
+          updateFields.sendedBy &&
+          updateFields.sendedBy !== transaction.sendedBy.toString());
+
       if (transaction.type === "Received") {
         oldStaffAccount = await StaffAccount.findById(
           transaction.receivedBy
         ).session(session);
-        newStaffAccount = updateFields.receivedBy
+        newStaffAccount = staffChanged
           ? await StaffAccount.findById(updateFields.receivedBy).session(
               session
             )
@@ -896,7 +977,7 @@ exports.editTransaction = async (req, res) => {
         oldStaffAccount = await StaffAccount.findById(
           transaction.sendedBy
         ).session(session);
-        newStaffAccount = updateFields.sendedBy
+        newStaffAccount = staffChanged
           ? await StaffAccount.findById(updateFields.sendedBy).session(session)
           : oldStaffAccount;
       }
@@ -940,49 +1021,63 @@ exports.editTransaction = async (req, res) => {
       });
 
       // Calculate the difference in amount if amount is provided
-      let amountDifference = 0;
-      
       const oldAmount = transaction.amount;
       const newAmount =
         updateFields.amount !== undefined
           ? parseFloat(updateFields.amount)
           : oldAmount;
+      const amountDifference = newAmount - oldAmount;
 
-      if (updateFields.amount !== undefined) {
-        amountDifference = newAmount - oldAmount;
-        transaction.amount = newAmount;
-      }
+      transaction.amount = newAmount;
 
       // Handle approved transactions
       if (transaction.status === "Approved") {
         if (transaction.type === "Received") {
           customerAccount.receivedAmount += amountDifference;
-          oldStaffAccount.balance -= oldAmount;
-          oldStaffAccount.totalReceivedAmount -= oldAmount;
-          newStaffAccount.balance += newAmount;
-          newStaffAccount.totalReceivedAmount += newAmount;
+          if (staffChanged) {
+            oldStaffAccount.balance -= oldAmount;
+            oldStaffAccount.totalReceivedAmount -= oldAmount;
+            newStaffAccount.balance += newAmount;
+            newStaffAccount.totalReceivedAmount += newAmount;
+          } else {
+            oldStaffAccount.balance += amountDifference;
+            oldStaffAccount.totalReceivedAmount += amountDifference;
+          }
         } else {
           // "Sent"
           customerAccount.receivedAmount -= amountDifference;
           customerAccount.returnAmount += amountDifference;
-          oldStaffAccount.balance += oldAmount;
-          oldStaffAccount.totalSentAmount -= oldAmount;
-          newStaffAccount.balance -= newAmount;
-          newStaffAccount.totalSentAmount += newAmount;
+          if (staffChanged) {
+            oldStaffAccount.balance += oldAmount;
+            oldStaffAccount.totalSentAmount -= oldAmount;
+            newStaffAccount.balance -= newAmount;
+            newStaffAccount.totalSentAmount += newAmount;
+          } else {
+            oldStaffAccount.balance -= amountDifference;
+            oldStaffAccount.totalSentAmount += amountDifference;
+          }
         }
       }
       // Handle pending transactions
       else if (transaction.status === "Pending") {
         if (transaction.type === "Received") {
           customerAccount.pendingReceivedAmount += amountDifference;
-          oldStaffAccount.pendingReceivedAmount -= oldAmount;
-          newStaffAccount.pendingReceivedAmount += newAmount;
+          if (staffChanged) {
+            oldStaffAccount.pendingReceivedAmount -= oldAmount;
+            newStaffAccount.pendingReceivedAmount += newAmount;
+          } else {
+            oldStaffAccount.pendingReceivedAmount += amountDifference;
+          }
         } else {
           // "Sent"
           customerAccount.pendingReceivedAmount -= amountDifference;
           customerAccount.pendingReturnAmount += amountDifference;
-          oldStaffAccount.pendingSentAmount -= oldAmount;
-          newStaffAccount.pendingSentAmount += newAmount;
+          if (staffChanged) {
+            oldStaffAccount.pendingSentAmount -= oldAmount;
+            newStaffAccount.pendingSentAmount += newAmount;
+          } else {
+            oldStaffAccount.pendingSentAmount += amountDifference;
+          }
         }
       }
 
@@ -1032,7 +1127,7 @@ exports.editTransaction = async (req, res) => {
         transaction.save({ session }),
         customerAccount.save({ session }),
         oldStaffAccount.save({ session }),
-        newStaffAccount.save({ session }),
+        ...(staffChanged ? [newStaffAccount.save({ session })] : []),
       ]);
 
       // Return the updated data

@@ -1,5 +1,5 @@
 const CustomerAccountV2 = require("../Models/Customer-Account-v2");
-
+const mongoose = require("mongoose");
 const populateCustomerAccount = () => [
   {
     path: "maid",
@@ -29,6 +29,59 @@ const populateCustomerAccount = () => [
     ],
   },
 ];
+
+const aggregatePendingDues = async (matchStage, populateOptions) => {
+  const pipeline = [
+    { $match: matchStage },
+    {
+      $lookup: {
+        from: "transactions",
+        localField: "transactions",
+        foreignField: "_id",
+        as: "transactionsData",
+      },
+    },
+    {
+      $addFields: {
+        oldestTransactionDate: { $min: "$transactionsData.date" },
+      },
+    },
+    { $sort: { oldestTransactionDate: 1 } },
+    { $project: { transactionsData: 0 } },
+  ];
+
+  const accounts = await CustomerAccountV2.aggregate(pipeline);
+  await CustomerAccountV2.populate(accounts, populateOptions);
+  return accounts;
+};
+
+const pendingToReceiveMatch = {
+  profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
+  cosPaymentStatus: "Partially Paid",
+};
+
+const pendingToSendMatch = {
+  $or: [
+    {
+      profileHiringStatus: "Return",
+      $expr: {
+        $lt: [
+          "$returnAmount",
+          { $add: ["$receivedAmount", "$pendingReceivedAmount"] },
+        ],
+      },
+    },
+    {
+      profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
+      $expr: {
+        $gt: [
+          { $add: ["$receivedAmount", "$pendingReceivedAmount"] },
+          "$totalAmount",
+        ],
+      },
+    },
+  ],
+};
 
 exports.getAllAccounts = async (req, res) => {
   try {
@@ -318,123 +371,78 @@ exports.getExpiredTrialAccountsForUser = async (req, res) => {
 
 exports.getPendingDuesToReceive = async (req, res) => {
   try {
-    let query = {
-      profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
-      $or: [{ cosPaymentStatus: "Partially Paid" }],
-    };
-
-    const pendingDuesAccounts = await CustomerAccountV2.find(query)
-      .populate(populateCustomerAccount())
-      .sort({ "transactions.date": 1 });
-
+    const pendingDuesAccounts = await aggregatePendingDues(
+      pendingToReceiveMatch,
+      populateCustomerAccount()
+    );
     res.status(200).json(pendingDuesAccounts);
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      error: "An error occurred while fetching pending dues accounts",
-    });
+    res
+      .status(500)
+      .json({
+        error: "An error occurred while fetching pending dues accounts",
+      });
   }
 };
 
 exports.getPendingDuesToReceiveForUser = async (req, res) => {
   try {
     const userId = req.staffAccountId;
-    let query = {
-      staff: userId,
-      profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
-      cosPaymentStatus: "Partially Paid",
+    const matchStage = {
+      ...pendingToReceiveMatch,
+      staff: new mongoose.Types.ObjectId(userId),
     };
-
-    const pendingDuesAccounts = await CustomerAccountV2.find(query)
-      .populate(populateCustomerAccount())
-      .sort({ "transactions.date": 1 });
-
+    const pendingDuesAccounts = await aggregatePendingDues(
+      matchStage,
+      populateCustomerAccount()
+    );
     res.status(200).json(pendingDuesAccounts);
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      error: "An error occurred while fetching pending dues accounts",
-    });
+    res
+      .status(500)
+      .json({
+        error: "An error occurred while fetching pending dues accounts",
+      });
   }
 };
 
 exports.getPendingDuesToSend = async (req, res) => {
   try {
-    let query = {
-      $or: [
-        {
-          profileHiringStatus: "Return",
-          $expr: {
-            $lt: [
-              "$returnAmount",
-              { $add: ["$receivedAmount", "$pendingReceivedAmount"] },
-            ],
-          },
-        },
-        {
-          profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
-          $expr: {
-            $gt: [
-              { $add: ["$receivedAmount", "$pendingReceivedAmount"] },
-              "$totalAmount",
-            ],
-          },
-        },
-      ],
-    };
-
-    const pendingDuesToSendAccounts = await CustomerAccountV2.find(query)
-      .populate(populateCustomerAccount())
-      .sort({ "transactions.date": 1 });
-
+    const pendingDuesToSendAccounts = await aggregatePendingDues(
+      pendingToSendMatch,
+      populateCustomerAccount()
+    );
     res.status(200).json(pendingDuesToSendAccounts);
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      error: "An error occurred while fetching pending dues to send",
-    });
+    res
+      .status(500)
+      .json({ error: "An error occurred while fetching pending dues to send" });
   }
 };
 
 exports.getPendingDuesToSendForUser = async (req, res) => {
   try {
     const userId = req.staffAccountId;
-    let query = {
-      staff: userId,
-      $or: [
-        {
-          profileHiringStatus: "Return",
-          $expr: {
-            $lt: [
-              "$returnAmount",
-              { $add: ["$receivedAmount", "$pendingReceivedAmount"] },
-            ],
-          },
-        },
-        {
-          profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
-          $expr: {
-            $gt: [
-              { $add: ["$receivedAmount", "$pendingReceivedAmount"] },
-              "$totalAmount",
-            ],
-          },
-        },
-      ],
+    const matchStage = {
+      ...pendingToSendMatch,
+      staff: new mongoose.Types.ObjectId(userId),
     };
-
-    const pendingDuesToSendAccounts = await CustomerAccountV2.find(query)
-      .populate(populateCustomerAccount())
-      .sort({ "transactions.date": 1 });
-
+    const pendingDuesToSendAccounts = await aggregatePendingDues(
+      matchStage,
+      populateCustomerAccount()
+    );
     res.status(200).json(pendingDuesToSendAccounts);
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      error: "An error occurred while fetching pending dues to send",
-    });
+    res
+      .status(500)
+      .json({ error: "An error occurred while fetching pending dues to send" });
   }
 };
+
 exports.getClearedPaymentsCustomers = async (req, res) => {
   try {
     let query = {
@@ -444,7 +452,9 @@ exports.getClearedPaymentsCustomers = async (req, res) => {
           cosPaymentStatus: "Fully Paid",
         },
         {
-          profileHiringStatus: "Return",
+          profileHiringStatus: {
+            $in: ["Return", "Hired", "Monthly Hired", "On Trial"],
+          },
           cosPaymentStatus: "Refunded",
         },
       ],
@@ -474,7 +484,9 @@ exports.getClearedPaymentsCustomersForUser = async (req, res) => {
           cosPaymentStatus: "Fully Paid",
         },
         {
-          profileHiringStatus: "Return",
+          profileHiringStatus: {
+            $in: ["Return", "Hired", "Monthly Hired", "On Trial"],
+          },
           cosPaymentStatus: "Refunded",
         },
       ],
