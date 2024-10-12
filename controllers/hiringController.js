@@ -227,6 +227,7 @@ exports.createHiringOrTrial = async (req, res) => {
           ? "Fully Paid"
           : "Partially Paid",
       isMonthlyHiring,
+      hiringDate: new Date(hiringDate),
       monthlyHiringDuration: isMonthlyHiring
         ? parseFloat(monthlyHiringDuration)
         : undefined,

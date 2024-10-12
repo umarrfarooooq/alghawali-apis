@@ -47,6 +47,7 @@ const customerAccountSchema = new mongoose.Schema({
     default: "Partially Paid",
   },
   isMonthlyHiring: { type: Boolean, default: false },
+  hiringDate: { type: Date },
   monthlyHiringDuration: { type: Number },
   monthlyHireStartDate: { type: Date },
   monthlyHireEndDate: { type: Date },

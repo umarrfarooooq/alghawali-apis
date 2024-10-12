@@ -199,19 +199,20 @@ exports.addMaid = async (req, res) => {
   }
 };
 
-// exports.updateNationality = async (req, res) => {
-//   try {
-//     const result = await Maid.updateMany(
-//       { nationality: 'MYANMAR' },
-//       { $set: { nationality: 'Myanmar' } }
-//     );
 
-//     res.status(200).json({ message: 'Nationality spelling updated successfully' });
-//   } catch (error) {
-//     console.error('Error updating nationality spelling:', error);
-//     res.status(500).json({ error: 'An error occurred' });
-//   }
-// };
+exports.updateNationality = async (req, res) => {
+  try {
+    const result = await Maid.updateMany(
+      { nationality: 'KENYA' },
+      { $set: { nationality: 'Kenya' } }
+    );
+
+    res.status(200).json({ message: 'Nationality spelling updated successfully' });
+  } catch (error) {
+    console.error('Error updating nationality spelling:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
 
 exports.updateMaid = async (req, res) => {
   try {

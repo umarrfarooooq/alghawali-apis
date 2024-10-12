@@ -1042,9 +1042,22 @@ exports.getAllAccountSummaryWithFilters = async (req, res) => {
     let dateFilter = {};
 
     if (startDate && endDate) {
+      const parsedStartDate = new Date(startDate);
+      const parsedEndDate = new Date(endDate);
+
+      if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
+        return res
+          .status(400)
+          .json({
+            error: "Invalid date format. Please use YYYY-MM-DD format.",
+          });
+      }
+
       dateFilter = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
+        date: {
+          $gte: parsedStartDate,
+          $lte: parsedEndDate,
+        },
       };
     } else if (period) {
       const now = new Date();
@@ -1168,10 +1181,21 @@ exports.getAllAccountsTransactionHistory = async (req, res) => {
     let dateFilter = {};
 
     if (startDate && endDate) {
+      const parsedStartDate = new Date(startDate);
+      const parsedEndDate = new Date(endDate);
+
+      if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
+        return res
+          .status(400)
+          .json({
+            error: "Invalid date format. Please use YYYY-MM-DD format.",
+          });
+      }
+
       dateFilter = {
         date: {
-          $gte: new Date(startDate),
-          $lte: new Date(endDate),
+          $gte: parsedStartDate,
+          $lte: parsedEndDate,
         },
       };
     } else if (period) {

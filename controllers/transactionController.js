@@ -21,13 +21,31 @@ const populateTransaction = () => [
   },
 ];
 
+const searchByInvoiceNumber = (transactions, searchTerm) => {
+  if (!searchTerm) return transactions;
+
+  const lowercasedTerm = searchTerm.toLowerCase();
+  return transactions.filter(
+    (transaction) =>
+      transaction.invoice &&
+      transaction.invoice.number &&
+      transaction.invoice.number.toLowerCase().includes(lowercasedTerm)
+  );
+};
+
 exports.getAllPendingTransactions = async (req, res) => {
   try {
+    const { searchTerm } = req.query;
+
     const transactions = await Transaction.find({ status: "Pending" }).populate(
       populateTransaction()
     );
+    const filteredTransactions = searchByInvoiceNumber(
+      transactions,
+      searchTerm
+    );
 
-    res.status(200).json(transactions);
+    res.status(200).json(filteredTransactions);
   } catch (error) {
     res
       .status(500)
@@ -37,11 +55,17 @@ exports.getAllPendingTransactions = async (req, res) => {
 
 exports.getAllRecentTransactions = async (req, res) => {
   try {
+    const { searchTerm } = req.query;
     const transactions = await Transaction.find({})
       .sort({ date: -1 })
       .populate(populateTransaction());
 
-    res.status(200).json(transactions);
+    const filteredTransactions = searchByInvoiceNumber(
+      transactions,
+      searchTerm
+    );
+
+    res.status(200).json(filteredTransactions);
   } catch (error) {
     res
       .status(500)
@@ -51,6 +75,7 @@ exports.getAllRecentTransactions = async (req, res) => {
 
 exports.getMyAllPendingTransactions = async (req, res) => {
   try {
+    const { searchTerm } = req.query;
     const transactions = await Transaction.find({
       $or: [
         { receivedBy: req.staffAccountId, status: "Pending", type: "Received" },
@@ -58,7 +83,12 @@ exports.getMyAllPendingTransactions = async (req, res) => {
       ],
     }).populate(populateTransaction());
 
-    res.status(200).json(transactions);
+    const filteredTransactions = searchByInvoiceNumber(
+      transactions,
+      searchTerm
+    );
+
+    res.status(200).json(filteredTransactions);
   } catch (error) {
     res
       .status(500)
@@ -68,6 +98,7 @@ exports.getMyAllPendingTransactions = async (req, res) => {
 
 exports.getMyAllRecentTransactions = async (req, res) => {
   try {
+    const { searchTerm } = req.query;
     const transactions = await Transaction.find({
       $or: [
         { receivedBy: req.staffAccountId, type: "Received" },
@@ -77,7 +108,12 @@ exports.getMyAllRecentTransactions = async (req, res) => {
       .sort({ date: -1 })
       .populate(populateTransaction());
 
-    res.status(200).json(transactions);
+    const filteredTransactions = searchByInvoiceNumber(
+      transactions,
+      searchTerm
+    );
+
+    res.status(200).json(filteredTransactions);
   } catch (error) {
     res
       .status(500)

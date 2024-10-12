@@ -378,11 +378,9 @@ exports.getPendingDuesToReceive = async (req, res) => {
     res.status(200).json(pendingDuesAccounts);
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({
-        error: "An error occurred while fetching pending dues accounts",
-      });
+    res.status(500).json({
+      error: "An error occurred while fetching pending dues accounts",
+    });
   }
 };
 
@@ -400,11 +398,9 @@ exports.getPendingDuesToReceiveForUser = async (req, res) => {
     res.status(200).json(pendingDuesAccounts);
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({
-        error: "An error occurred while fetching pending dues accounts",
-      });
+    res.status(500).json({
+      error: "An error occurred while fetching pending dues accounts",
+    });
   }
 };
 
@@ -501,6 +497,175 @@ exports.getClearedPaymentsCustomersForUser = async (req, res) => {
     console.error(error);
     res.status(500).json({
       error: "An error occurred while fetching cleared payments customers",
+    });
+  }
+};
+
+// sales report
+
+exports.getStaffSalesAnalytics = async (req, res) => {
+  try {
+    const { staffId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        hiringDate: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate),
+        },
+      };
+    }
+
+    const staffAccounts = await CustomerAccountV2.find({
+      staff: staffId,
+      ...dateFilter,
+    }).populate("maid", "name code");
+
+    const analytics = {
+      totalCustomers: staffAccounts.length,
+      activeCustomers: 0,
+      returnedCustomers: 0,
+      totalReceivedAmount: 0,
+      customerDetails: [],
+    };
+
+    for (const account of staffAccounts) {
+      const isActive = ["Hired", "Monthly Hired", "On Trial"].includes(
+        account.profileHiringStatus
+      );
+      const isReturned = account.profileHiringStatus === "Return";
+
+      if (isActive) analytics.activeCustomers++;
+      if (isReturned) analytics.returnedCustomers++;
+      const totalReceivedAmount =
+        account.receivedAmount + account.pendingReceivedAmount;
+      analytics.totalReceivedAmount += totalReceivedAmount;
+
+      analytics.customerDetails.push({
+        customerId: account._id,
+        customerName: account.customerName,
+        uniqueCode: account.uniqueCode,
+        maidName: account.maid ? account.maid.name : "N/A",
+        maidCode: account.maid ? account.maid.code : "N/A",
+        hiringStatus: account.profileHiringStatus,
+        receivedAmount: totalReceivedAmount,
+        hiringDate: account.hiringDate,
+      });
+    }
+
+    res.status(200).json(analytics);
+  } catch (error) {
+    console.error("Error fetching staff sales analytics:", error);
+    res.status(500).json({
+      error: "An error occurred while fetching staff sales analytics",
+    });
+  }
+};
+
+exports.getAllStaffSalesAnalytics = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        hiringDate: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate),
+        },
+      };
+    }
+
+    const allStaffAccounts = await CustomerAccountV2.aggregate([
+      { $match: dateFilter },
+      {
+        $group: {
+          _id: "$staff",
+          totalCustomers: { $sum: 1 },
+          activeCustomers: {
+            $sum: {
+              $cond: [
+                {
+                  $in: [
+                    "$profileHiringStatus",
+                    ["Hired", "Monthly Hired", "On Trial"],
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+          returnedCustomers: {
+            $sum: {
+              $cond: [{ $eq: ["$profileHiringStatus", "Return"] }, 1, 0],
+            },
+          },
+          totalReceivedAmount: {
+            $sum: { $add: ["$receivedAmount", "$pendingReceivedAmount"] },
+          },
+          customerDetails: {
+            $push: {
+              customerId: "$_id",
+              customerName: "$customerName",
+              uniqueCode: "$uniqueCode",
+              maidId: "$maid",
+              hiringStatus: "$profileHiringStatus",
+              receivedAmount: {
+                $add: ["$receivedAmount", "$pendingReceivedAmount"],
+              },
+              hiringDate: "$hiringDate",
+            },
+          },
+        },
+      },
+      {
+        $lookup: {
+          from: "staffaccounts",
+          localField: "_id",
+          foreignField: "_id",
+          as: "staffInfo",
+        },
+      },
+      { $unwind: "$staffInfo" },
+      {
+        $project: {
+          staffId: "$_id",
+          staffName: "$staffInfo.staffName",
+          staffCode: "$staffInfo.staffCode",
+          totalCustomers: 1,
+          activeCustomers: 1,
+          returnedCustomers: 1,
+          totalReceivedAmount: 1,
+          customerDetails: 1,
+        },
+      },
+      { $sort: { totalCustomers: -1 } },
+    ]);
+
+    for (let staff of allStaffAccounts) {
+      for (let customer of staff.customerDetails) {
+        if (customer.maidId) {
+          const maid = await mongoose
+            .model("Maid")
+            .findById(customer.maidId, "name code");
+          customer.maidName = maid ? maid.name : "N/A";
+          customer.maidCode = maid ? maid.code : "N/A";
+        } else {
+          customer.maidName = "N/A";
+          customer.maidCode = "N/A";
+        }
+        delete customer.maidId;
+      }
+    }
+
+    res.status(200).json(allStaffAccounts);
+  } catch (error) {
+    console.error("Error fetching all staff sales analytics:", error);
+    res.status(500).json({
+      error: "An error occurred while fetching all staff sales analytics",
     });
   }
 };

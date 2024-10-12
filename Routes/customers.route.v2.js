@@ -107,4 +107,19 @@ router.get(
   customerController.getClearedPaymentsCustomersForUser
 );
 
+// sales report
+router.get(
+  "/staff-sales-analytics/:staffId",
+  verifyStaffToken,
+  checkPermission(roles.canAccessOnAccounts),
+  customerController.getStaffSalesAnalytics
+);
+
+router.get(
+  "/staff-sales-analytics",
+  verifyStaffToken,
+  checkPermission(roles.fullAccessOnAccounts),
+  customerController.getAllStaffSalesAnalytics
+);
+
 module.exports = router;
