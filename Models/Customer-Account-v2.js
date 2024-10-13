@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const cron = require("node-cron");
 
 const accountHistorySchema = new mongoose.Schema({
   receivedAmount: { type: Number, default: 0 },
@@ -38,7 +37,7 @@ const customerAccountSchema = new mongoose.Schema({
   officeCharges: { type: Number, default: 0 },
   profileHiringStatus: {
     type: String,
-    enum: ["Hired", "Monthly Hired", "Return", "On Trial"],
+    enum: ["Hired", "Monthly Hired", "Return", "On Trial", "Completed"],
     default: "On Trial",
   },
   cosPaymentStatus: {
@@ -68,25 +67,5 @@ const CustomerAccountV2 = mongoose.model(
   "CustomerAccountV2",
   customerAccountSchema
 );
-
-async function updateExpiredTrials() {
-  const now = new Date();
-  try {
-    const result = await CustomerAccountV2.updateMany(
-      {
-        profileHiringStatus: "On Trial",
-        trialStatus: "Active",
-        trialEndDate: { $lte: now },
-      },
-      {
-        $set: { trialStatus: "Expired" },
-      }
-    );
-    console.log(`Updated ${result.uniqueCode} expired trials`);
-  } catch (error) {
-    console.error("Error updating expired trials:", error);
-  }
-}
-cron.schedule("0 * * * *", updateExpiredTrials);
 
 module.exports = CustomerAccountV2;

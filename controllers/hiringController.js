@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const cron = require("node-cron");
 const { isValidObjectId } = mongoose;
 const Maid = require("../Models/Maid");
 const CustomerAccountV2 = require("../Models/Customer-Account-v2");
@@ -1154,3 +1155,70 @@ exports.editTransaction = async (req, res) => {
     }
   }
 };
+
+const updateExpiredMonthlyHires = async () => {
+  const session = await mongoose.startSession();
+
+  try {
+    await session.withTransaction(async () => {
+      const now = new Date();
+      const expiredMonthlyHires = await Maid.find({
+        isMonthlyHired: true,
+        monthlyHireEndDate: { $lte: now },
+      }).session(session);
+
+      for (const maid of expiredMonthlyHires) {
+        maid.isMonthlyHired = false;
+        maid.monthlyHireEndDate = null;
+        await maid.save({ session });
+
+        const customerAccount = await CustomerAccountV2.findOne({
+          maid: maid._id,
+          profileHiringStatus: "Monthly Hired",
+        })
+          .sort({ _id: -1 })
+          .session(session);
+
+        if (customerAccount) {
+          customerAccount.profileHiringStatus = "Completed";
+          await customerAccount.save({ session });
+        }
+      }
+
+      console.log(
+        `Updated ${expiredMonthlyHires.length} expired monthly hires.`
+      );
+    });
+
+    console.log("Successfully updated expired monthly hires.");
+  } catch (error) {
+    console.error("Error updating expired monthly hires:", error);
+  } finally {
+    session.endSession();
+  }
+};
+
+const updateExpiredTrials = async () => {
+  const now = new Date();
+  try {
+    const result = await CustomerAccountV2.updateMany(
+      {
+        profileHiringStatus: "On Trial",
+        trialStatus: "Active",
+        trialEndDate: { $lte: now },
+      },
+      {
+        $set: { trialStatus: "Expired" },
+      }
+    );
+    console.log(`Updated ${result.length} expired trials`);
+  } catch (error) {
+    console.error("Error updating expired trials:", error);
+  }
+};
+const updateExpiredRecords = () => {
+  updateExpiredTrials();
+  updateExpiredMonthlyHires();
+};
+
+cron.schedule("0 * * * *", updateExpiredRecords);

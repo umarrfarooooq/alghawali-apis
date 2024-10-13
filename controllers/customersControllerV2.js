@@ -56,7 +56,9 @@ const aggregatePendingDues = async (matchStage, populateOptions) => {
 };
 
 const pendingToReceiveMatch = {
-  profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
+  profileHiringStatus: {
+    $in: ["Hired", "Monthly Hired", "On Trial", "Completed"],
+  },
   cosPaymentStatus: "Partially Paid",
 };
 
@@ -72,7 +74,9 @@ const pendingToSendMatch = {
       },
     },
     {
-      profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
+      profileHiringStatus: {
+        $in: ["Hired", "Monthly Hired", "On Trial", "Completed"],
+      },
       $expr: {
         $gt: [
           { $add: ["$receivedAmount", "$pendingReceivedAmount"] },
@@ -114,7 +118,9 @@ exports.getCustomerAccountForMaid = async (req, res) => {
     const { maidId } = req.params;
     const customerAccount = await CustomerAccountV2.findOne({
       maid: maidId,
-      profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
+      profileHiringStatus: {
+        $in: ["Hired", "Monthly Hired", "On Trial", "Completed"],
+      },
     }).sort({ createdAt: -1 });
 
     if (!customerAccount) {
@@ -195,7 +201,7 @@ exports.getAllActiveCustomers = async (req, res) => {
     let query = {
       cosPaymentStatus: { $nin: ["Fully Paid", "Refunded"] },
       profileHiringStatus: {
-        $in: ["Hired", "Monthly Hired", "On Trial", "Return"],
+        $in: ["Hired", "Monthly Hired", "On Trial", "Completed", "Return"],
       },
     };
 
@@ -240,7 +246,7 @@ exports.getAllActiveCustomersForUser = async (req, res) => {
       staff: userId,
       cosPaymentStatus: { $nin: ["Fully Paid", "Refunded"] },
       profileHiringStatus: {
-        $in: ["Hired", "Monthly Hired", "On Trial", "Return"],
+        $in: ["Hired", "Monthly Hired", "Completed", "On Trial", "Return"],
       },
     };
 
@@ -444,12 +450,14 @@ exports.getClearedPaymentsCustomers = async (req, res) => {
     let query = {
       $or: [
         {
-          profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
+          profileHiringStatus: {
+            $in: ["Hired", "Completed", "Monthly Hired", "On Trial"],
+          },
           cosPaymentStatus: "Fully Paid",
         },
         {
           profileHiringStatus: {
-            $in: ["Return", "Hired", "Monthly Hired", "On Trial"],
+            $in: ["Return", "Hired", "Completed", "Monthly Hired", "On Trial"],
           },
           cosPaymentStatus: "Refunded",
         },
@@ -476,12 +484,14 @@ exports.getClearedPaymentsCustomersForUser = async (req, res) => {
       staff: userId,
       $or: [
         {
-          profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
+          profileHiringStatus: {
+            $in: ["Hired", "Completed", "Monthly Hired", "On Trial"],
+          },
           cosPaymentStatus: "Fully Paid",
         },
         {
           profileHiringStatus: {
-            $in: ["Return", "Hired", "Monthly Hired", "On Trial"],
+            $in: ["Return", "Hired", "Completed", "Monthly Hired", "On Trial"],
           },
           cosPaymentStatus: "Refunded",
         },
@@ -603,21 +613,13 @@ exports.getAllStaffSalesAnalytics = async (req, res) => {
               $cond: [{ $eq: ["$profileHiringStatus", "Return"] }, 1, 0],
             },
           },
+          completedCustomers: {
+            $sum: {
+              $cond: [{ $eq: ["$profileHiringStatus", "Completed"] }, 1, 0],
+            },
+          },
           totalReceivedAmount: {
             $sum: { $add: ["$receivedAmount", "$pendingReceivedAmount"] },
-          },
-          customerDetails: {
-            $push: {
-              customerId: "$_id",
-              customerName: "$customerName",
-              uniqueCode: "$uniqueCode",
-              maidId: "$maid",
-              hiringStatus: "$profileHiringStatus",
-              receivedAmount: {
-                $add: ["$receivedAmount", "$pendingReceivedAmount"],
-              },
-              hiringDate: "$hiringDate",
-            },
           },
         },
       },
@@ -638,28 +640,12 @@ exports.getAllStaffSalesAnalytics = async (req, res) => {
           totalCustomers: 1,
           activeCustomers: 1,
           returnedCustomers: 1,
+          completedCustomers: 1,
           totalReceivedAmount: 1,
-          customerDetails: 1,
         },
       },
       { $sort: { totalCustomers: -1 } },
     ]);
-
-    for (let staff of allStaffAccounts) {
-      for (let customer of staff.customerDetails) {
-        if (customer.maidId) {
-          const maid = await mongoose
-            .model("Maid")
-            .findById(customer.maidId, "name code");
-          customer.maidName = maid ? maid.name : "N/A";
-          customer.maidCode = maid ? maid.code : "N/A";
-        } else {
-          customer.maidName = "N/A";
-          customer.maidCode = "N/A";
-        }
-        delete customer.maidId;
-      }
-    }
 
     res.status(200).json(allStaffAccounts);
   } catch (error) {
