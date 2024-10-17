@@ -12,6 +12,7 @@ router.get('/google', staffController.createStaffGoogle);
 router.get('/auth/google/access', staffController.createStaffGoogleCallback);
 router.get('/', verifyStaffToken,  checkPermission(roles.ShowAccessOnAddStaff), staffController.getAllStaff);
 router.post('/login', staffController.loginStaff)
+router.post('/accounts-login', staffController.loginAccountsStaff)
 router.get('/:id', verifyStaffToken, checkPermission(roles.ShowAccessOnAddStaff), staffController.getStaffById);
 router.put('/:id', verifyStaffToken, checkPermission(roles.ShowAccessOnAddStaff), upload.single("staffImage"), staffController.updateStaffById);
 router.delete('/:id', verifyStaffToken, checkPermission(roles.ShowAccessOnAddStaff), staffController.deleteStaffById);

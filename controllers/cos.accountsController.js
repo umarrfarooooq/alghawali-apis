@@ -7,6 +7,7 @@ const roles = require("../config/roles");
 const sharp = require("sharp");
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
+const CustomerAccountV2 = require("../Models/Customer-Account-v2");
 
 function generateUniqueCode() {
   const uniqueCodeLength = 6;
@@ -122,21 +123,17 @@ exports.createHiring = async (req, res) => {
         isNaN(parseFloat(monthlyHiringDuration)) ||
         parseFloat(monthlyHiringDuration) <= 0)
     ) {
-      return res
-        .status(400)
-        .json({
-          error: "Valid monthly hiring duration is required for monthly hiring",
-        });
+      return res.status(400).json({
+        error: "Valid monthly hiring duration is required for monthly hiring",
+      });
     }
     if (
       selectedBank &&
       (typeof selectedBank !== "string" || selectedBank.trim().length === 0)
     ) {
-      return res
-        .status(400)
-        .json({
-          error: "If provided, selected bank must be a non-empty string",
-        });
+      return res.status(400).json({
+        error: "If provided, selected bank must be a non-empty string",
+      });
     }
     const existingMaid = await Maid.findById(maidId);
     if (!existingMaid) {
@@ -474,14 +471,19 @@ exports.listMaidAgain = async (req, res) => {
       customerAccount.monthlyHireEndDate = undefined;
       customerAccount.monthlyPaymentStatus = undefined;
 
-      const receivedAfterOfficeCharges = customerAccount.receivedAmount - parseFloat(officeCharges) || 0;
+      const receivedAfterOfficeCharges =
+        customerAccount.receivedAmount - parseFloat(officeCharges) || 0;
       customerAccount.profileId = null;
-      if (receivedAfterOfficeCharges < customerAccount.returnAmount + returnAmount || 0) {
-        return res
-          .status(400)
-          .json("Return Amount exceeded recieved amount");
+      if (
+        receivedAfterOfficeCharges <
+          customerAccount.returnAmount + returnAmount ||
+        0
+      ) {
+        return res.status(400).json("Return Amount exceeded recieved amount");
       }
-      customerAccount.receivedAmount = receivedAfterOfficeCharges ? receivedAfterOfficeCharges: 0;
+      customerAccount.receivedAmount = receivedAfterOfficeCharges
+        ? receivedAfterOfficeCharges
+        : 0;
 
       if (receivedBy) {
         const existingStaffAccount = await StaffAccount.findOne({
@@ -495,7 +497,6 @@ exports.listMaidAgain = async (req, res) => {
           req.staffRoles &&
           req.staffRoles.includes(roles.fullAccessOnAccounts)
         ) {
-          
           existingStaffAccount.balance += parseFloat(receivedAmount);
           existingStaffAccount.totalReceivedAmount +=
             parseFloat(receivedAmount);
@@ -585,7 +586,6 @@ exports.listMaidAgain = async (req, res) => {
           req.staffRoles &&
           req.staffRoles.includes(roles.fullAccessOnAccounts)
         ) {
-          
           existingStaffAccount.balance -= parseFloat(returnAmount) || 0;
           existingStaffAccount.totalSentAmount += parseFloat(returnAmount) || 0;
           existingStaffAccount.accountHistory.push({
@@ -700,7 +700,7 @@ exports.listMaidAgain = async (req, res) => {
       if (!customerAccount) {
         return res.status(404).json({ error: "Customer account not found" });
       }
-      
+
       customerAccount.profileHiringStatus = "Replaced";
       customerAccount.isMonthlyHiring = false;
       customerAccount.monthlyHiringDuration = undefined;
@@ -711,11 +711,9 @@ exports.listMaidAgain = async (req, res) => {
       const receivedAfterOfficeCharges =
         customerAccount.receivedAmount - parseFloat(officeCharges) || 0;
 
-        if (receivedAfterOfficeCharges < parseFloat(returnAmount)) {
-          return res
-            .status(400)
-            .json("Return Amount exceeded recieved amount");
-        }
+      if (receivedAfterOfficeCharges < parseFloat(returnAmount)) {
+        return res.status(400).json("Return Amount exceeded recieved amount");
+      }
 
       customerAccount.receivedAmount = receivedAfterOfficeCharges
         ? receivedAfterOfficeCharges
@@ -730,7 +728,6 @@ exports.listMaidAgain = async (req, res) => {
       customerAccount.profileName = newMaid.name;
       customerAccount.profileId = newMaidId;
       customerAccount.profileCode = newMaid.code;
-
 
       const newHiring = new Hiring({
         fullName: customerAccount.customerName,
@@ -761,7 +758,7 @@ exports.listMaidAgain = async (req, res) => {
       // newMaid.isHired = true;
       // await existingMaid.save();
       // await newMaid.save();
-      
+
       if (receivedBy) {
         const existingStaffAccount = await StaffAccount.findOne({
           staffName: receivedBy,
@@ -790,7 +787,9 @@ exports.listMaidAgain = async (req, res) => {
           });
 
           customerAccount.receivedAmount =
-            receivedAfterOfficeCharges >= 0 ? receivedAfterOfficeCharges : customerAccount.receivedAmount;
+            receivedAfterOfficeCharges >= 0
+              ? receivedAfterOfficeCharges
+              : customerAccount.receivedAmount;
 
           if (balance) {
             receivedAmount
@@ -801,7 +800,6 @@ exports.listMaidAgain = async (req, res) => {
               ? (customerAccount.returnAmount += parseFloat(returnAmount))
               : "";
           }
-
 
           if (customerAccount.receivedAmount === customerAccount.returnAmount) {
             customerAccount.cosPaymentStatus = "Fully Paid";
@@ -818,7 +816,6 @@ exports.listMaidAgain = async (req, res) => {
             approved: true,
           });
 
-          
           existingMaid.isHired = false;
           newMaid.isHired = true;
           await existingStaffAccount.save();
@@ -962,7 +959,7 @@ exports.listMaidAgain = async (req, res) => {
                 existingStaffAccount.pendingApprovals.length - 1
               ]._id,
           });
-          
+
           existingMaid.isHired = false;
           newMaid.isHired = true;
           await existingMaid.save();
@@ -1719,12 +1716,10 @@ exports.updatePartialPaymentFromAccount = async (req, res) => {
         }
       }
 
-      res
-        .status(200)
-        .json({
-          message: "Payment updated successfully",
-          savedCustomerAccount,
-        });
+      res.status(200).json({
+        message: "Payment updated successfully",
+        savedCustomerAccount,
+      });
     } else {
       if (!paymentData.amountReturnToCustomer || !paymentData.paymentMethod) {
         return res
@@ -1941,6 +1936,54 @@ exports.getAllAccounts = async (req, res) => {
     }
 
     const allAccounts = await CustomerAccount.find(query);
+    res.status(200).json(allAccounts);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
+
+exports.getAllAccountsV2 = async (req, res) => {
+  try {
+    const { searchTerm } = req.query;
+    let query = {};
+
+    if (searchTerm) {
+      query = {
+        $or: [
+          { uniqueCode: { $regex: searchTerm, $options: "i" } },
+          { customerName: { $regex: searchTerm, $options: "i" } },
+          { phoneNo: { $regex: searchTerm, $options: "i" } },
+        ],
+      };
+    }
+
+    const allAccounts = await CustomerAccountV2.find(query)
+      .populate({
+        path: "maid",
+        select: "name code _id",
+      })
+      .populate({
+        path: "staff",
+        select: "staffName staffCode _id",
+      })
+      .populate({
+        path: "accountHistory.receivedBy",
+        select: "staffName staffCode _id",
+      })
+      .populate({
+        path: "accountHistory.sendedBy",
+        select: "staffName staffCode _id",
+      })
+      .populate({
+        path: "accountHistory.staffAccount",
+        select: "staffName staffCode _id",
+      })
+      .populate({
+        path: "accountHistory.transaction",
+        select: "status",
+      });
+
     res.status(200).json(allAccounts);
   } catch (error) {
     console.error(error);

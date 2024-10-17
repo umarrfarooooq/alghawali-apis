@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/public/cv.css" />
+    <title>Swift Trial Paper</title>
+  </head>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    @page {
+      size: A4 portrait;
+    }
+    #latterHead {
+      background-image: url("https://res.cloudinary.com/dtcz2zuev/image/upload/v1728477649/trial-papers/asroe7el5jfjwnqfjmew.png");
+      background-repeat: no-repeat;
+      background-position: center center;
+      background-size: cover;
+      width: 2480px;
+      height: 3508px;
+    }
+  </style>
+
+  <body>
+    <div id="latterHead" class="relative overflow-hidden">
+      <div class="w-full h-full absolute top-[4%] right-[-2%]">
+        <div
+          id="sponserName"
+          class="w-[675px] h-[111px] absolute top-[21%] right-[9%] transform -translate-x-1/2"
+        >
+          <div class="flex items-center justify-center h-full w-full">
+            <div
+              class="text-center text-[#252e31] font-black"
+              style="font-size: clamp(1rem, 1.5vw, 4rem)"
+            >
+              <%= sponserName ? sponserName : "Not Found" %>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="idCardNumber"
+          class="w-[675px] h-[80px] absolute top-[24.5%] right-[9%] transform -translate-x-1/2"
+        >
+          <div class="flex items-center justify-center h-full w-full">
+            <div
+              class="text-center text-[#252e31] font-black"
+              style="font-size: clamp(1rem, 1.5vw, 4rem)"
+            >
+              <%= idCardNumber ? idCardNumber : "Not Found" %>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="mobileNumber"
+          class="w-[675px] h-[80px] absolute top-[27%] right-[9%] transform -translate-x-1/2"
+        >
+          <div class="flex items-center justify-center h-full w-full">
+            <div
+              class="text-center text-[#252e31] font-black"
+              style="font-size: clamp(1rem, 1.5vw, 4rem)"
+            >
+              <%= mobileNumber ? mobileNumber : "Not Found" %>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="profileName"
+          class="w-[770px] h-[111px] absolute top-[44%] right-[12%] transform -translate-x-1/2"
+        >
+          <div class="flex items-center justify-center h-full w-full">
+            <div
+              class="text-center text-[#252e31] font-black"
+              style="font-size: clamp(1rem, 1.5vw, 4rem)"
+            >
+              <%= profileName ? profileName : "Not Found" %>
+            </div>
+          </div>
+        </div>
+        <div
+          id="passportNumber"
+          class="w-[380px] h-[111px] absolute top-[44%] left-[12%] transform -translate-x-1/2"
+        >
+          <div class="flex items-center justify-center h-full w-full">
+            <div
+              class="text-center text-[#252e31] font-black"
+              style="font-size: clamp(1rem, 1.5vw, 4rem)"
+            >
+              <%= passportNumber ? passportNumber : "Not Found" %>
+            </div>
+          </div>
+        </div>
+        <div
+          id="price"
+          class="w-[330px] h-[111px] absolute top-[54.5%] right-[26%] transform -translate-x-1/2"
+        >
+          <div class="flex items-center justify-center h-full w-full">
+            <div
+              class="text-center text-[#252e31] font-black"
+              style="font-size: clamp(1rem, 1.5vw, 4rem)"
+            >
+              <%= price ? price : "Not Found" %>
+            </div>
+          </div>
+        </div>
+        <div
+          id="salery"
+          class="w-[245px] h-[111px] absolute top-[58%] right-[16.5%] transform -translate-x-1/2"
+        >
+          <div class="flex items-center justify-center h-full w-full">
+            <div
+              class="text-center text-[#252e31] font-black"
+              style="font-size: clamp(1rem, 1.5vw, 4rem)"
+            >
+              <%= salery ? salery : "Not Found" %>
+            </div>
+          </div>
+        </div>
+        <div
+          id="amount"
+          class="w-[800px] h-[111px] absolute top-[61.5%] right-[3.5%] transform -translate-x-1/2"
+        >
+          <div class="flex items-center justify-center h-full w-full">
+            <div
+              class="text-center text-[#252e31] font-black"
+              style="font-size: clamp(1rem, 1.5vw, 4rem)"
+            >
+              <%= amount ? amount : "Not Found" %>
+            </div>
+          </div>
+        </div>
+        <div
+          id="remainingAmount"
+          class="w-[800px] h-[111px] absolute top-[65.5%] right-[3.5%] transform -translate-x-1/2"
+        >
+          <div class="flex items-center justify-center h-full w-full">
+            <div
+              class="text-center text-[#252e31] font-black"
+              style="font-size: clamp(1rem, 1.5vw, 4rem)"
+            >
+              <%= remainingAmount ? remainingAmount : "Not Found" %>
+            </div>
+          </div>
+        </div>
+
+        <div
+          id="date"
+          class="w-[450px] h-[111px] absolute top-[21%] left-[14%] transform -translate-x-1/2"
+        >
+          <div class="flex items-center justify-center h-full w-full">
+            <div
+              class="text-center text-[#252e31] font-black"
+              style="font-size: clamp(1rem, 1.5vw, 4rem)"
+            >
+              <%= date ? date.toLocaleDateString("en-GB") : "Not Found" %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,12 +1,11 @@
-const fs = require("fs")
-const Maid = require("../Models/Maid")
-const Hiring = require("../Models/HiringDetail")
-const ffmpegStatic = require('ffmpeg-static');
-const ffmpeg = require('fluent-ffmpeg');
-const jimp = require('jimp');
-const { v4: uuidv4 } = require('uuid');
+const fs = require("fs");
+const Maid = require("../Models/Maid");
+const Hiring = require("../Models/HiringDetail");
+const ffmpegStatic = require("ffmpeg-static");
+const ffmpeg = require("fluent-ffmpeg");
+const jimp = require("jimp");
+const { v4: uuidv4 } = require("uuid");
 const path = require("path");
-
 
 const generateUniqueCode = async (countryCode) => {
   let isUnique = false;
@@ -14,7 +13,7 @@ const generateUniqueCode = async (countryCode) => {
   let counter = 1;
 
   while (!isUnique) {
-    code = `${countryCode}${counter.toString().padStart(4, '0')}`;
+    code = `${countryCode}${counter.toString().padStart(4, "0")}`;
     const existingMaid = await Maid.findOne({ code });
 
     if (!existingMaid) {
@@ -27,18 +26,18 @@ const generateUniqueCode = async (countryCode) => {
   return code;
 };
 
-exports.addMaid = async (req, res) =>{
+exports.addMaid = async (req, res) => {
   try {
     const compressImages = async () => {
-      const images = ['maidImg', 'maidImg2', 'maidImg3', 'maidImg4'];
+      const images = ["maidImg", "maidImg2", "maidImg3", "maidImg4"];
       const imagePaths = [];
-    
+
       for (const image of images) {
         if (req.files[image] && req.files[image].length > 0) {
           const imagePath = req.files[image][0].path;
           const uniqueImageName = `${uuidv4()}_${image}.webp`;
           const compressedImagePath = `uploads/images/${uniqueImageName}`;
-        
+
           try {
             const loadedImage = await jimp.read(imagePath);
             loadedImage.resize(500, jimp.AUTO);
@@ -49,19 +48,19 @@ exports.addMaid = async (req, res) =>{
             try {
               await fs.promises.unlink(imagePath);
             } catch (err) {
-              console.error('Error deleting original image:', err.message);
+              console.error("Error deleting original image:", err.message);
             }
-    
+
             imagePaths.push(compressedImagePath);
           } catch (err) {
-            console.error('Error compressing image:', err.message);
+            console.error("Error compressing image:", err.message);
             imagePaths.push(undefined);
           }
         } else {
           imagePaths.push(undefined);
         }
       }
-    
+
       return imagePaths;
     };
     const compressedImagePaths = await compressImages();
@@ -75,39 +74,39 @@ exports.addMaid = async (req, res) =>{
         const checkFile = req.files["videoLink"][0];
         videoPath = checkFile.path;
         compressedVideoPath = "uploads/maidVideos";
-        const videoBitrate = '800k';
-        const crfValue = '28';
+        const videoBitrate = "800k";
+        const crfValue = "28";
         uniqueFilename = `video_${Date.now()}.mp4`;
 
         ffmpeg.setFfmpegPath(ffmpegStatic);
 
         ffmpeg()
           .input(videoPath)
-          .videoCodec('libx264')
-          .addOption('-crf', crfValue)
-          .addOption('-b:v', videoBitrate)
+          .videoCodec("libx264")
+          .addOption("-crf", crfValue)
+          .addOption("-b:v", videoBitrate)
           .output(`${compressedVideoPath}/${uniqueFilename}`)
-          .on('start', () => {
-            console.log('Compression started');
+          .on("start", () => {
+            console.log("Compression started");
           })
-          .on('end', () => {
-            console.log('Video compression complete.');
+          .on("end", () => {
+            console.log("Video compression complete.");
             fs.unlink(videoPath, (err) => {
               if (err) {
-                console.error('Error deleting the file:', err.message);
+                console.error("Error deleting the file:", err.message);
               } else {
-                console.log('Original video file deleted successfully.');
+                console.log("Original video file deleted successfully.");
               }
             });
             resolve(`${compressedVideoPath}/${uniqueFilename}`);
           })
-          .on('error', (err) => {
-            console.error('FFmpeg Error:', err.message);
-            reject('Error compressing the video.');
+          .on("error", (err) => {
+            console.error("FFmpeg Error:", err.message);
+            reject("Error compressing the video.");
           })
           .run();
       } else {
-        resolve('');
+        resolve("");
       }
     });
 
@@ -115,98 +114,105 @@ exports.addMaid = async (req, res) =>{
 
     const nationality = req.body.nationality.toLowerCase();
 
-    if (nationality === 'myanmar') {
-        country = 'MMR';
-    } else if (nationality === 'nepal') {
-        country = 'NPL';
-    } else if (nationality === 'sri lanka') {
-        country = 'LKA';
-    } else if (nationality === 'india') {
-        country = 'IND';
-    }else if (nationality === 'philippines') {
-      country = 'PHL';
+    if (nationality === "myanmar") {
+      country = "MMR";
+    } else if (nationality === "nepal") {
+      country = "NPL";
+    } else if (nationality === "sri lanka") {
+      country = "LKA";
+    } else if (nationality === "india") {
+      country = "IND";
+    } else if (nationality === "philippines") {
+      country = "PHL";
     } else {
-        country = 'GLB';
+      country = "GLB";
     }
-    
+
     if (!country) {
-      return res.status(400).json({ error: 'Invalid country' });
+      return res.status(400).json({ error: "Invalid country" });
     }
 
     const maidCode = await generateUniqueCode(country);
 
-    
     const experienceYears = req.body.experienceYears;
     const experienceCountry = req.body.experienceCountry;
 
     let experience;
 
     if (!experienceYears || !experienceCountry) {
-      experience = `New`
-    }else{
+      experience = `New`;
+    } else {
       experience = `${experienceYears} from ${experienceCountry}`;
     }
 
-    const maidNationality = (req.body.nationality === 'Other') ? req.body.otherNationality : req.body.nationality;
-    const maidReligion = (req.body.religion === 'Other') ? req.body.otherReligion : req.body.religion;
+    const maidNationality =
+      req.body.nationality === "Other"
+        ? req.body.otherNationality
+        : req.body.nationality;
+    const maidReligion =
+      req.body.religion === "Other"
+        ? req.body.otherReligion
+        : req.body.religion;
     const allLanguages = Array.isArray(req.body.languages)
-    ? req.body.languages.includes('Other')
-      ? [...req.body.languages.filter(lang => lang !== 'Other'), req.body.otherLanguages]
-      : req.body.languages
-    : [];
+      ? req.body.languages.includes("Other")
+        ? [
+            ...req.body.languages.filter((lang) => lang !== "Other"),
+            req.body.otherLanguages,
+          ]
+        : req.body.languages
+      : [];
 
-      const videoCompressionResult = await compressVideo;
+    const videoCompressionResult = await compressVideo;
 
-      const newMaid = new Maid({
-        code: maidCode,
-        name: req.body.name,
-        nationality:maidNationality,
-        position:req.body.position,
-        salery:req.body.salery,
-        price:req.body.price,
-        religion:maidReligion,
-        maritalStatus:req.body.maritalStatus,
-        childrens:req.body.childrens,
-        age:req.body.age,
-        appliedFor:req.body.appliedFor,
-        experience:experience,
-        education:req.body.education,
-        languages:allLanguages,
-        contractPeriod:req.body.contractPeriod,
-        remarks:req.body.remarks,
-        addedBy:req.body.addedBy || '',
-        staffId:req.body.staffId || '',
-        maidImg: compressedImagePaths[0] || '',
-        maidImg2: compressedImagePaths[1] || '',
-        maidImg3: compressedImagePaths[2] || '',
-        maidImg4: compressedImagePaths[3] || '',
-        videoLink: videoCompressionResult || ''
-      });
+    const newMaid = new Maid({
+      code: maidCode,
+      name: req.body.name,
+      nationality: maidNationality,
+      position: req.body.position,
+      salery: req.body.salery,
+      price: req.body.price,
+      religion: maidReligion,
+      maritalStatus: req.body.maritalStatus,
+      childrens: req.body.childrens,
+      age: req.body.age,
+      appliedFor: req.body.appliedFor,
+      experience: experience,
+      education: req.body.education,
+      languages: allLanguages,
+      contractPeriod: req.body.contractPeriod,
+      remarks: req.body.remarks,
+      addedBy: req.body.addedBy || "",
+      staffId: req.body.staffId || "",
+      maidImg: compressedImagePaths[0] || "",
+      maidImg2: compressedImagePaths[1] || "",
+      maidImg3: compressedImagePaths[2] || "",
+      maidImg4: compressedImagePaths[3] || "",
+      videoLink: videoCompressionResult || "",
+    });
 
-      const savedMaid = await newMaid.save();
-  
-      res.status(201).json(savedMaid);
-    } catch (error) {
-      console.log(error);
-      res.status(500).json({ error: 'An error occurred' });
-    }
-  
-}
+    const savedMaid = await newMaid.save();
 
-// exports.updateNationality = async (req, res) => {
-//   try {
-//     const result = await Maid.updateMany(
-//       { nationality: 'MYANMAR' },
-//       { $set: { nationality: 'Myanmar' } }
-//     );
-    
-//     res.status(200).json({ message: 'Nationality spelling updated successfully' });
-//   } catch (error) {
-//     console.error('Error updating nationality spelling:', error);
-//     res.status(500).json({ error: 'An error occurred' });
-//   }
-// };
+    res.status(201).json(savedMaid);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
 
+
+exports.updateNationality = async (req, res) => {
+  try {
+    const result = await Maid.updateMany(
+      { nationality: 'KENYA' },
+      { $set: { nationality: 'Kenya' } }
+    );
+
+    res.status(200).json({ message: 'Nationality spelling updated successfully' });
+  } catch (error) {
+    console.error('Error updating nationality spelling:', error);
+    res.status(500).json({ error: 'An error occurred' });
+  }
+};
 
 exports.updateMaid = async (req, res) => {
   try {
@@ -215,11 +221,11 @@ exports.updateMaid = async (req, res) => {
     const existingMaid = await Maid.findById(maidId);
 
     if (!existingMaid) {
-      return res.status(404).json({ error: 'Maid not found' });
+      return res.status(404).json({ error: "Maid not found" });
     }
 
     const compressImages = async () => {
-      const images = ['maidImg', 'maidImg2', 'maidImg3', 'maidImg4'];
+      const images = ["maidImg", "maidImg2", "maidImg3", "maidImg4"];
       const imagePaths = [];
 
       for (const image of images) {
@@ -237,10 +243,15 @@ exports.updateMaid = async (req, res) => {
 
             if (existingMaid[image]) {
               try {
-                await fs.promises.unlink(path.join(__dirname, '..', existingMaid[image]));
+                await fs.promises.unlink(
+                  path.join(__dirname, "..", existingMaid[image])
+                );
               } catch (err) {
-                if (err.code !== 'ENOENT') {
-                  console.error(`Error deleting previous ${image}:`, err.message);
+                if (err.code !== "ENOENT") {
+                  console.error(
+                    `Error deleting previous ${image}:`,
+                    err.message
+                  );
                 }
               }
             }
@@ -248,12 +259,12 @@ exports.updateMaid = async (req, res) => {
             try {
               await fs.promises.unlink(imagePath);
             } catch (err) {
-              console.error('Error processing image:', err.message);
+              console.error("Error processing image:", err.message);
             }
 
             imagePaths.push(compressedImagePath);
           } catch (err) {
-            console.error('Error processing image:', err.message);
+            console.error("Error processing image:", err.message);
             imagePaths.push(undefined);
           }
         } else {
@@ -265,61 +276,65 @@ exports.updateMaid = async (req, res) => {
     };
 
     const compressVideo = async () => {
-      if (req.files['videoLink'] && req.files['videoLink'][0]) {
-        const videoPath = req.files['videoLink'][0].path;
+      if (req.files["videoLink"] && req.files["videoLink"][0]) {
+        const videoPath = req.files["videoLink"][0].path;
         const compressedVideoPath = "uploads/maidVideos";
-        const videoBitrate = '800k';
-        const crfValue = '28';
+        const videoBitrate = "800k";
+        const crfValue = "28";
         const uniqueFilename = `video_${Date.now()}.mp4`;
 
         ffmpeg.setFfmpegPath(ffmpegStatic);
 
         try {
           if (existingMaid && existingMaid.videoLink) {
-            const videoPathToDelete = path.join(__dirname, '..', existingMaid.videoLink);
+            const videoPathToDelete = path.join(
+              __dirname,
+              "..",
+              existingMaid.videoLink
+            );
             try {
               await fs.promises.unlink(videoPathToDelete);
-              console.log('Previous video deleted successfully.');
+              console.log("Previous video deleted successfully.");
             } catch (err) {
-              if (err.code !== 'ENOENT') {
-                console.error('Error deleting previous video:', err.message);
+              if (err.code !== "ENOENT") {
+                console.error("Error deleting previous video:", err.message);
               }
             }
           }
-          
+
           return new Promise((resolve, reject) => {
             ffmpeg()
               .input(videoPath)
-              .videoCodec('libx264')
-              .addOption('-crf', crfValue)
-              .addOption('-b:v', videoBitrate)
+              .videoCodec("libx264")
+              .addOption("-crf", crfValue)
+              .addOption("-b:v", videoBitrate)
               .output(`${compressedVideoPath}/${uniqueFilename}`)
-              .on('start', () => {
-                console.log('Compression started');
+              .on("start", () => {
+                console.log("Compression started");
               })
-              .on('end', () => {
-                console.log('Video compression complete.');
+              .on("end", () => {
+                console.log("Video compression complete.");
                 fs.unlink(videoPath, (err) => {
                   if (err) {
-                    console.error('Error deleting the file:', err.message);
+                    console.error("Error deleting the file:", err.message);
                   } else {
-                    console.log('Original video file deleted successfully.');
+                    console.log("Original video file deleted successfully.");
                   }
                 });
                 resolve(`${compressedVideoPath}/${uniqueFilename}`);
               })
-              .on('error', (err) => {
-                console.error('FFmpeg Error:', err.message);
-                reject('Error compressing the video.');
+              .on("error", (err) => {
+                console.error("FFmpeg Error:", err.message);
+                reject("Error compressing the video.");
               })
               .run();
           });
         } catch (err) {
-          console.error('Error processing video:', err.message);
-          return '';
+          console.error("Error processing video:", err.message);
+          return "";
         }
       } else {
-        return '';
+        return "";
       }
     };
 
@@ -328,19 +343,23 @@ exports.updateMaid = async (req, res) => {
 
     const updatedMaid = {
       ...updatedMaidData,
-      maidImg: compressedImagePaths[0] || existingMaid.maidImg || '',
-      maidImg2: compressedImagePaths[1] || existingMaid.maidImg2 || '',
-      maidImg3: compressedImagePaths[2] || existingMaid.maidImg3 || '',
-      maidImg4: compressedImagePaths[3] || existingMaid.maidImg4 || '',
-      videoLink: videoCompressionResult || existingMaid.videoLink || '',
+      maidImg: compressedImagePaths[0] || existingMaid.maidImg || "",
+      maidImg2: compressedImagePaths[1] || existingMaid.maidImg2 || "",
+      maidImg3: compressedImagePaths[2] || existingMaid.maidImg3 || "",
+      maidImg4: compressedImagePaths[3] || existingMaid.maidImg4 || "",
+      videoLink: videoCompressionResult || existingMaid.videoLink || "",
     };
 
-    const updatedMaidInstance = await Maid.findByIdAndUpdate(maidId, updatedMaid, { new: true });
+    const updatedMaidInstance = await Maid.findByIdAndUpdate(
+      maidId,
+      updatedMaid,
+      { new: true }
+    );
 
     res.status(200).json(updatedMaidInstance);
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'An error occurred' });
+    console.error("Error:", error);
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 
@@ -354,40 +373,48 @@ exports.deleteMaid = async (req, res) => {
       findMaidForDelete.maidImg2,
       findMaidForDelete.maidImg3,
       findMaidForDelete.maidImg4,
-      findMaidForDelete.videoLink
+      findMaidForDelete.videoLink,
     ];
 
     for (const imagePath of imagePaths) {
       if (imagePath) {
         try {
-          await fs.promises.unlink(path.join(__dirname, '..', imagePath));
+          await fs.promises.unlink(path.join(__dirname, "..", imagePath));
         } catch (err) {
-          console.error('Error deleting image:', err.message);
+          console.error("Error deleting image:", err.message);
         }
       }
     }
     const videoPath = findMaidForDelete.videoLink;
     if (videoPath) {
       try {
-        await fs.promises.unlink(path.join(__dirname, '..', videoPath));
+        await fs.promises.unlink(path.join(__dirname, "..", videoPath));
       } catch (err) {
-        console.error('Error deleting video:', err.message);
+        console.error("Error deleting video:", err.message);
       }
     }
     const deletedMaid = await Maid.findByIdAndDelete({ _id: maidId });
     if (!deletedMaid) {
-      return res.status(404).json({ error: 'Maid not found' });
+      return res.status(404).json({ error: "Maid not found" });
     }
 
     res.status(204).send("Deleted");
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 
 exports.getAllMaids = async (req, res) => {
   try {
-    const { search, countries, languages, religions, experiences, page = 1, category } = req.query;
+    const {
+      search,
+      countries,
+      languages,
+      religions,
+      experiences,
+      page = 1,
+      category,
+    } = req.query;
 
     let query = {};
 
@@ -395,7 +422,7 @@ exports.getAllMaids = async (req, res) => {
 
     const perPage = maidCount > 0 ? maidCount : 15;
 
-    if (category && category !== 'All') {
+    if (category && category !== "All") {
       query.appliedFor = category;
     }
 
@@ -412,7 +439,7 @@ exports.getAllMaids = async (req, res) => {
 
     if (languages) {
       let individualLanguages = [];
-    
+
       if (Array.isArray(languages)) {
         individualLanguages = languages
           .flatMap((lang) => lang.split(",").map((l) => l.trim()))
@@ -420,15 +447,16 @@ exports.getAllMaids = async (req, res) => {
       } else if (typeof languages === "string") {
         individualLanguages = languages.split(",").map((l) => l.trim());
       }
-        
+
       if (individualLanguages.includes("Other")) {
-        query.languages = { $not: { $elemMatch: { $in: individualLanguages } } };
+        query.languages = {
+          $not: { $elemMatch: { $in: individualLanguages } },
+        };
       } else {
         query.languages = { $elemMatch: { $in: individualLanguages } };
       }
     }
-    
-    
+
     if (religions && religions.length > 0) {
       if (religions.includes("Other")) {
         query.$or = [
@@ -449,21 +477,112 @@ exports.getAllMaids = async (req, res) => {
         query.experience = { $exists: true };
       }
     }
-    
 
     const offset = (page - 1) * perPage;
 
-    const allMaids = await Maid.find(query)
-      .skip(offset)
-      .limit(Number(perPage));
+    const allMaids = await Maid.find(query).skip(offset).limit(Number(perPage));
 
-      const availableMaids = allMaids.filter((maid) => !maid.isHired && !maid.isMonthlyHired);
-      res.status(200).json(availableMaids);
+    const availableMaids = allMaids.filter(
+      (maid) => !maid.isHired && !maid.isMonthlyHired && !maid.isOnTrial
+    );
+    res.status(200).json(availableMaids);
   } catch (error) {
     console.error("Error fetching maid profiles:", error);
     res.status(500).json({ error: "An error occurred" });
   }
 };
+
+exports.getAllHiredMaids = async (req, res) => {
+  try {
+    const {
+      search,
+      countries,
+      languages,
+      religions,
+      experiences,
+      page = 1,
+      category,
+    } = req.query;
+
+    let query = {
+      $or: [{ isHired: true }, { isMonthlyHired: true }, { isOnTrial: true }],
+    };
+
+    if (category && category !== "All") {
+      query.appliedFor = category;
+    }
+
+    if (search) {
+      query = {
+        $and: [
+          {
+            $or: [
+              { name: { $regex: search, $options: "i" } },
+              { code: { $regex: search, $options: "i" } },
+            ],
+          },
+          query,
+        ],
+      };
+    }
+
+    if (countries && countries.length > 0) {
+      query.nationality = { $in: countries.split(",") };
+    }
+
+    if (languages) {
+      let individualLanguages = languages.split(",").map((l) => l.trim());
+
+      if (individualLanguages.includes("Other")) {
+        query.languages = {
+          $not: { $elemMatch: { $in: individualLanguages } },
+        };
+      } else {
+        query.languages = { $elemMatch: { $in: individualLanguages } };
+      }
+    }
+
+    if (religions && religions.length > 0) {
+      const religionArray = religions.split(",");
+      if (religionArray.includes("Other")) {
+        query.$and = query.$and || [];
+        query.$and.push({
+          $or: [
+            { religion: { $in: religionArray } },
+            { religion: { $nin: religionArray.filter((r) => r !== "Other") } },
+          ],
+        });
+      } else {
+        query.religion = { $in: religionArray };
+      }
+    }
+
+    if (experiences && experiences.length > 0) {
+      const experienceArray = experiences.split(",");
+      if (experienceArray.includes("Experienced")) {
+        query.experience = { $regex: /^\d/ };
+      } else if (experienceArray.includes("New")) {
+        query.experience = { $eq: "New" };
+      } else {
+        query.experience = { $exists: true };
+      }
+    }
+
+    const maidCount = await Maid.countDocuments(query);
+    const perPage = maidCount > 0 ? maidCount : 15;
+    const offset = (page - 1) * perPage;
+
+    const hiredMaids = await Maid.find(query)
+      .skip(offset)
+      .limit(Number(perPage));
+
+    res.status(200).json(hiredMaids);
+  } catch (error) {
+    console.error("Error fetching hired maid profiles:", error);
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
+
 
 exports.getAllMaidsWithHired = async (req, res) => {
   try {
@@ -486,14 +605,12 @@ exports.getAllMaidsWithHired = async (req, res) => {
 
     const offset = (page - 1) * perPage;
 
-    const allMaids = await Maid.find(query)
-      .skip(offset)
-      .limit(Number(perPage));
+    const allMaids = await Maid.find(query).skip(offset).limit(Number(perPage));
 
-      const availableMaids = allMaids.filter((maid) => maid.isHired);
+    const availableMaids = allMaids.filter((maid) => maid.isHired);
     res.status(200).json(availableMaids);
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 exports.getAllMaidsWithMontlyHired = async (req, res) => {
@@ -517,14 +634,41 @@ exports.getAllMaidsWithMontlyHired = async (req, res) => {
 
     const offset = (page - 1) * perPage;
 
-    const allMaids = await Maid.find(query)
-      .skip(offset)
-      .limit(Number(perPage));
+    const allMaids = await Maid.find(query).skip(offset).limit(Number(perPage));
 
-      const availableMaids = allMaids.filter((maid) => maid.isMonthlyHired);
+    const availableMaids = allMaids.filter((maid) => maid.isMonthlyHired);
     res.status(200).json(availableMaids);
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
+exports.getAllOnTrialMaids = async (req, res) => {
+  try {
+    const { search, page = 1 } = req.query;
+
+    let query = {};
+
+    const maidCount = await Maid.countDocuments(query);
+
+    const perPage = maidCount > 0 ? maidCount : 15;
+
+    if (search) {
+      query = {
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { code: { $regex: search, $options: "i" } },
+        ],
+      };
+    }
+
+    const offset = (page - 1) * perPage;
+
+    const allMaids = await Maid.find(query).skip(offset).limit(Number(perPage));
+
+    const availableMaids = allMaids.filter((maid) => maid.isOnTrial);
+    res.status(200).json(availableMaids);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 
@@ -533,14 +677,14 @@ exports.getAllHiredMaidsByStaffId = async (req, res) => {
     const { staffId } = req.params;
 
     if (!staffId) {
-      return res.status(400).json({ error: 'Staff ID is required' });
+      return res.status(400).json({ error: "Staff ID is required" });
     }
 
-    const maidsByStaff = await Maid.find({ staffId : staffId });
+    const maidsByStaff = await Maid.find({ staffId: staffId });
     const availableMaids = maidsByStaff.filter((maid) => maid.isHired);
     res.status(200).json(availableMaids);
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 exports.getAllMonthlyHiredMaidsByStaffId = async (req, res) => {
@@ -548,14 +692,29 @@ exports.getAllMonthlyHiredMaidsByStaffId = async (req, res) => {
     const { staffId } = req.params;
 
     if (!staffId) {
-      return res.status(400).json({ error: 'Staff ID is required' });
+      return res.status(400).json({ error: "Staff ID is required" });
     }
 
-    const maidsByStaff = await Maid.find({ staffId : staffId });
+    const maidsByStaff = await Maid.find({ staffId: staffId });
     const availableMaids = maidsByStaff.filter((maid) => maid.isMonthlyHired);
     res.status(200).json(availableMaids);
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
+exports.getAllOnTrialMaidsByStaffId = async (req, res) => {
+  try {
+    const { staffId } = req.params;
+
+    if (!staffId) {
+      return res.status(400).json({ error: "Staff ID is required" });
+    }
+
+    const maidsByStaff = await Maid.find({ staffId: staffId });
+    const availableMaids = maidsByStaff.filter((maid) => maid.isOnTrial);
+    res.status(200).json(availableMaids);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 
@@ -564,134 +723,160 @@ exports.getAllNonHiredMaidsByStaffId = async (req, res) => {
     const { staffId } = req.params;
 
     if (!staffId) {
-      return res.status(400).json({ error: 'Staff ID is required' });
+      return res.status(400).json({ error: "Staff ID is required" });
     }
 
-    const maidsByStaff = await Maid.find({ staffId : staffId });
+    const maidsByStaff = await Maid.find({ staffId: staffId });
     const availableMaids = maidsByStaff.filter((maid) => !maid.isHired);
     res.status(200).json(availableMaids);
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 
-exports.getMaid = async (req, res) =>{
-    try {
-        const maidId = req.params.id;
-    
-        const maid = await Maid.findById(maidId);
-    
-        if (!maid) {
-          return res.status(404).json({ error: 'Maid not found' });
-        }
-    
-        res.status(200).json(maid);
-      } catch (error) {
-        res.status(500).json({ error: 'An error occurred' });
-      }
-}
+exports.getMaid = async (req, res) => {
+  try {
+    const maidId = req.params.id;
+
+    const maid = await Maid.findById(maidId);
+
+    if (!maid) {
+      return res.status(404).json({ error: "Maid not found" });
+    }
+
+    res.status(200).json(maid);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
 
 exports.updateMaidAvailablity = async (req, res) => {
   try {
-      const maidId = req.params.id;
-      const existingMaid = await Maid.findById(maidId);
+    const maidId = req.params.id;
+    const existingMaid = await Maid.findById(maidId);
 
-      if (!existingMaid) {
-          return res.status(404).json({ error: 'Maid not found' });
-      }
-      if(existingMaid.isHired){
-        existingMaid.isHired = false;
-      }else{
-        existingMaid.isHired = true;
-      }
-      await existingMaid.save();
+    if (!existingMaid) {
+      return res.status(404).json({ error: "Maid not found" });
+    }
+    if (existingMaid.isHired) {
+      existingMaid.isHired = false;
+    } else {
+      existingMaid.isHired = true;
+    }
+    await existingMaid.save();
 
-      res.status(200).send("Successfully Update Availablity")
-    } catch (error) {
-      res.status(500).json({ error: 'An error occurred' });
+    res.status(200).send("Successfully Update Availablity");
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
   }
-}
+};
 
 exports.getMaidsInfo = async (req, res) => {
   try {
     const totalMaids = await Maid.countDocuments();
     const hiredMaids = await Maid.countDocuments({ isHired: true });
-    const monthlyHiredMaids = await Maid.countDocuments({ isMonthlyHired: true });
-    const unhiredMaids = await Maid.countDocuments({ isHired: false, isMonthlyHired: false });
-    const remainingMaids = totalMaids - hiredMaids - monthlyHiredMaids;
+    const monthlyHiredMaids = await Maid.countDocuments({
+      isMonthlyHired: true,
+    });
+    const onTrialMaids = await Maid.countDocuments({ isOnTrial: true });
+    const unhiredMaids = await Maid.countDocuments({
+      isHired: false,
+      isMonthlyHired: false,
+      isOnTrial: false,
+    });
+    const remainingMaids =
+      totalMaids - hiredMaids - monthlyHiredMaids - onTrialMaids;
 
     const unHiredNationalityInfo = await Maid.aggregate([
-      { $match: { isHired: false, isMonthlyHired: false } },
-      { $group: { _id: '$nationality', count: { $sum: 1 } } }
+      { $match: { isHired: false, isMonthlyHired: false, isOnTrial: false } },
+      { $group: { _id: "$nationality", count: { $sum: 1 } } },
     ]);
 
     const hiredNationalityInfo = await Maid.aggregate([
       { $match: { isHired: true } },
-      { $group: { _id: '$nationality', count: { $sum: 1 } } }
+      { $group: { _id: "$nationality", count: { $sum: 1 } } },
     ]);
 
     const monthlyHiredNationalityInfo = await Maid.aggregate([
       { $match: { isMonthlyHired: true } },
-      { $group: { _id: '$nationality', count: { $sum: 1 } } }
+      { $group: { _id: "$nationality", count: { $sum: 1 } } },
+    ]);
+    const onTrialNationalityInfo = await Maid.aggregate([
+      { $match: { isOnTrial: true } },
+      { $group: { _id: "$nationality", count: { $sum: 1 } } },
     ]);
 
     const allNationalityInfo = await Maid.aggregate([
-      { $group: { _id: '$nationality', count: { $sum: 1 } } }
+      { $group: { _id: "$nationality", count: { $sum: 1 } } },
     ]);
 
     const unHiredNationalityCount = {};
-    unHiredNationalityInfo.forEach(nationality => {
+    unHiredNationalityInfo.forEach((nationality) => {
       unHiredNationalityCount[nationality._id] = nationality.count;
     });
 
     const hiredNationalityCount = {};
-    hiredNationalityInfo.forEach(nationality => {
+    hiredNationalityInfo.forEach((nationality) => {
       hiredNationalityCount[nationality._id] = nationality.count;
     });
 
     const monthlyHiredNationalityCount = {};
-    monthlyHiredNationalityInfo.forEach(nationality => {
+    monthlyHiredNationalityInfo.forEach((nationality) => {
       monthlyHiredNationalityCount[nationality._id] = nationality.count;
     });
 
     const allNationalityCount = {};
-    allNationalityInfo.forEach(nationality => {
+    allNationalityInfo.forEach((nationality) => {
       allNationalityCount[nationality._id] = nationality.count;
+    });
+
+    const onTrialNationalityCount = {};
+    onTrialNationalityInfo.forEach((nationality) => {
+      onTrialNationalityCount[nationality._id] = nationality.count;
     });
 
     res.status(200).json({
       totalMaids,
       hiredMaids,
       monthlyHiredMaids,
+      onTrialMaids,
       unhiredMaids,
       remainingMaids,
       unHiredNationalityCount,
       hiredNationalityCount,
       monthlyHiredNationalityCount,
-      allNationalityCount
+      onTrialNationalityCount,
+      allNationalityCount,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
 };
-
-
 
 exports.createHiring = async (req, res) => {
   try {
     const maidId = req.params.id;
     const existingMaid = await Maid.findById(maidId);
     if (!existingMaid) {
-      return res.status(404).json({ error: 'Maid not found' });
+      return res.status(404).json({ error: "Maid not found" });
     }
-    
-    const { fullName, totalAmount, advanceAmount, cosPhone, hiringBy, paymentMethod, receivedBy, hiringDate } = req.body;
+
+    const {
+      fullName,
+      totalAmount,
+      advanceAmount,
+      cosPhone,
+      hiringBy,
+      paymentMethod,
+      receivedBy,
+      hiringDate,
+    } = req.body;
     let hiringSlip;
     const selectedBank = req.body.selectedBank;
-    let receivedByWithBank ;
-    if(selectedBank){
-      receivedByWithBank = `${receivedBy} (${selectedBank})`
+    let receivedByWithBank;
+    if (selectedBank) {
+      receivedByWithBank = `${receivedBy} (${selectedBank})`;
     }
 
     if (req.file) {
@@ -707,22 +892,21 @@ exports.createHiring = async (req, res) => {
       hiringBy,
       maidId,
       paymentMethod,
-      receivedBy : selectedBank ? receivedByWithBank : receivedBy,
+      receivedBy: selectedBank ? receivedByWithBank : receivedBy,
       hiringDate,
-      hiringStatus: true
+      hiringStatus: true,
     });
 
-
-    if(!existingMaid.isHired){
-      existingMaid.isHired = true
+    if (!existingMaid.isHired) {
+      existingMaid.isHired = true;
     }
     const newPayment = {
       paymentMethod,
       totalAmount,
       receivedAmoount: advanceAmount,
       receivedBy: selectedBank ? receivedByWithBank : receivedBy,
-      paySlip: hiringSlip || '',
-      timestamp: Date.now()
+      paySlip: hiringSlip || "",
+      timestamp: Date.now(),
     };
 
     newHiring.paymentHistory.push(newPayment);
@@ -733,10 +917,9 @@ exports.createHiring = async (req, res) => {
     res.status(201).json(savedHiring);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
 };
-
 
 exports.createListAgain = async (req, res) => {
   try {
@@ -745,23 +928,31 @@ exports.createListAgain = async (req, res) => {
     const { unHiringReason, returnAmount } = req.body;
 
     if (!existingMaid) {
-      return res.status(404).json({ error: 'Maid not found' });
+      return res.status(404).json({ error: "Maid not found" });
     }
 
     if (existingMaid.isHired) {
-      const lastHiring = await Hiring.findOne({ maidId }).sort({ timestamp: -1 });
+      const lastHiring = await Hiring.findOne({ maidId }).sort({
+        timestamp: -1,
+      });
 
       const newHiring = new Hiring({
         maidId,
-        fullName: lastHiring ? lastHiring.fullName : 'No Prev Record',
+        fullName: lastHiring ? lastHiring.fullName : "No Prev Record",
         totalAmount: 0,
         advanceAmount: 0,
-        cosPhone: lastHiring ? lastHiring.cosPhone : '+999999999999',
-        hiringSlip: lastHiring ? lastHiring.hiringSlip : 'No Prev Record',
-        hiringBy: lastHiring ? lastHiring.hiringBy : 'No Prev Record',
-        paymentMethod: lastHiring.paymentMethod ? lastHiring.paymentMethod : 'No Prev Record',
-        receivedBy: lastHiring.receivedBy ? lastHiring.receivedBy : 'No Prev Record',
-        hiringDate: lastHiring.hiringDate ? lastHiring.hiringDate : 'No Prev Record',
+        cosPhone: lastHiring ? lastHiring.cosPhone : "+999999999999",
+        hiringSlip: lastHiring ? lastHiring.hiringSlip : "No Prev Record",
+        hiringBy: lastHiring ? lastHiring.hiringBy : "No Prev Record",
+        paymentMethod: lastHiring.paymentMethod
+          ? lastHiring.paymentMethod
+          : "No Prev Record",
+        receivedBy: lastHiring.receivedBy
+          ? lastHiring.receivedBy
+          : "No Prev Record",
+        hiringDate: lastHiring.hiringDate
+          ? lastHiring.hiringDate
+          : "No Prev Record",
         hiringStatus: false,
         returnAmount,
         unHiringReason,
@@ -769,8 +960,8 @@ exports.createListAgain = async (req, res) => {
 
       existingMaid.isHired = false;
 
-      if(lastHiring){
-        lastHiring.hiringStatus = false
+      if (lastHiring) {
+        lastHiring.hiringStatus = false;
         await lastHiring.save();
       }
 
@@ -778,24 +969,24 @@ exports.createListAgain = async (req, res) => {
       await existingMaid.save();
       res.status(201).json(savedHiring);
     } else {
-      return res.status(400).json({ error: 'Maid is not currently hired' });
+      return res.status(400).json({ error: "Maid is not currently hired" });
     }
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 
 exports.getMaidHistory = async (req, res) => {
   try {
     const maidId = req.params.id;
-    const allHistoryOfMaid = await Hiring.find({maidId});
+    const allHistoryOfMaid = await Hiring.find({ maidId });
     res.status(200).json(allHistoryOfMaid);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'An error occurred', message: error });
+    res.status(500).json({ error: "An error occurred", message: error });
   }
-}
+};
 
 exports.getAllHiring = async (req, res) => {
   try {
@@ -847,10 +1038,10 @@ exports.getAllHiring = async (req, res) => {
 
     const extractName = (receivedBy) => {
       if (receivedBy) {
-        const nameParts = receivedBy.split('(');
+        const nameParts = receivedBy.split("(");
         return nameParts[0].trim();
       } else {
-        return '';
+        return "";
       }
     };
 
@@ -865,41 +1056,45 @@ exports.getAllHiring = async (req, res) => {
         if (!receivedByTotal[receivedByName]) {
           receivedByTotal[receivedByName] = {
             bankTransfer: {
-              total: 0
-            }
+              total: 0,
+            },
           };
         } else if (!receivedByTotal[receivedByName].bankTransfer) {
           receivedByTotal[receivedByName].bankTransfer = {
-            total: 0
+            total: 0,
           };
         }
         receivedByTotal[receivedByName].total += receivedAmount;
 
-        if (paymentMethod === 'Cash') {
+        if (paymentMethod === "Cash") {
           receivedByTotal[receivedByName].cash += receivedAmount;
-        } else if (paymentMethod === 'Cheque') {
+        } else if (paymentMethod === "Cheque") {
           receivedByTotal[receivedByName].cheque += receivedAmount;
-        } else if (paymentMethod === 'Bank Transfer') {
-          const bankName = extractName(payment.receivedBy.split('(')[1]).replace(')', '');
+        } else if (paymentMethod === "Bank Transfer") {
+          const bankName = extractName(
+            payment.receivedBy.split("(")[1]
+          ).replace(")", "");
           if (receivedByTotal && receivedByTotal[receivedByName]) {
             let bankDetails = receivedByTotal[receivedByName].bankDetails;
-            
-            if (!bankDetails || typeof bankDetails !== 'object') {
-                bankDetails = {};
-                receivedByTotal[receivedByName].bankDetails = bankDetails;
+
+            if (!bankDetails || typeof bankDetails !== "object") {
+              bankDetails = {};
+              receivedByTotal[receivedByName].bankDetails = bankDetails;
             }
-        
+
             if (!bankDetails.hasOwnProperty(bankName)) {
-                bankDetails[bankName] = 0;
+              bankDetails[bankName] = 0;
             }
-        }
-          receivedByTotal[receivedByName].bankDetails[bankName] += receivedAmount;
+          }
+          receivedByTotal[receivedByName].bankDetails[bankName] +=
+            receivedAmount;
 
           receivedByTotal[receivedByName].bankTransfer.total += receivedAmount;
-          receivedByTotal[receivedByName].bankTransfer[bankName] = receivedByTotal[receivedByName].bankDetails[bankName];
+          receivedByTotal[receivedByName].bankTransfer[bankName] =
+            receivedByTotal[receivedByName].bankDetails[bankName];
         }
-              });
-            });
+      });
+    });
 
     allHiringWithHired.forEach((hireHistory) => {
       totalReturnAmount += hireHistory.returnAmount || 0;
@@ -918,10 +1113,9 @@ exports.getAllHiring = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'An error occurred', message: error });
+    res.status(500).json({ error: "An error occurred", message: error });
   }
 };
-
 
 exports.getHiringById = async (req, res) => {
   try {
@@ -929,13 +1123,13 @@ exports.getHiringById = async (req, res) => {
     const hiring = await Hiring.findById(hiringId);
 
     if (!hiring) {
-      return res.status(404).json({ error: 'Hiring information not found' });
+      return res.status(404).json({ error: "Hiring information not found" });
     }
 
     res.status(200).json(hiring);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 
@@ -946,11 +1140,11 @@ exports.updateHiringById = async (req, res) => {
     const existingHiring = await Hiring.findById(hiringId);
 
     if (!existingHiring) {
-      return res.status(404).json({ error: 'Hiring information not found' });
+      return res.status(404).json({ error: "Hiring information not found" });
     }
 
     let paySlip;
-    
+
     if (req.file) {
       paySlip = req.file.path;
     }
@@ -958,17 +1152,23 @@ exports.updateHiringById = async (req, res) => {
     const newPayment = {
       paymentMethod: updatedPaymentData.paymentMethod,
       totalAmount: existingHiring.totalAmount,
-      receivedAmoount: parseFloat(updatedPaymentData.amountGivenByCustomer) || 0,
-      receivedBy: updatedPaymentData.selectedBank ? `${updatedPaymentData.receivedBy} (${updatedPaymentData.selectedBank})` : updatedPaymentData.receivedBy,
+      receivedAmoount:
+        parseFloat(updatedPaymentData.amountGivenByCustomer) || 0,
+      receivedBy: updatedPaymentData.selectedBank
+        ? `${updatedPaymentData.receivedBy} (${updatedPaymentData.selectedBank})`
+        : updatedPaymentData.receivedBy,
       paySlip,
       timestamp: Date.now(),
     };
 
     existingHiring.paymentHistory.push(newPayment);
 
-    existingHiring.advanceAmount += parseFloat(updatedPaymentData.amountGivenByCustomer) || 0;
+    existingHiring.advanceAmount +=
+      parseFloat(updatedPaymentData.amountGivenByCustomer) || 0;
     existingHiring.paymentMethod = updatedPaymentData.paymentMethod;
-    existingHiring.receivedBy = updatedPaymentData.selectedBank ? `${updatedPaymentData.receivedBy} (${updatedPaymentData.selectedBank})` : updatedPaymentData.receivedBy;
+    existingHiring.receivedBy = updatedPaymentData.selectedBank
+      ? `${updatedPaymentData.receivedBy} (${updatedPaymentData.selectedBank})`
+      : updatedPaymentData.receivedBy;
     existingHiring.hiringSlip = paySlip;
 
     const savedHiring = await existingHiring.save();
@@ -976,7 +1176,7 @@ exports.updateHiringById = async (req, res) => {
     res.status(200).json(savedHiring);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 
@@ -986,9 +1186,9 @@ exports.editHiringById = async (req, res) => {
     const updatedHiringData = req.body;
     let paySlip;
 
-    if(req.file){
+    if (req.file) {
       paySlip = req.file.path;
-      updatedHiringData.hiringSlip = paySlip
+      updatedHiringData.hiringSlip = paySlip;
     }
 
     const updatedHiringInstance = await Hiring.findByIdAndUpdate(
@@ -998,13 +1198,13 @@ exports.editHiringById = async (req, res) => {
     );
 
     if (!updatedHiringInstance) {
-      return res.status(404).json({ error: 'Hiring information not found' });
+      return res.status(404).json({ error: "Hiring information not found" });
     }
 
     res.status(200).json(updatedHiringInstance);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
 };
 
@@ -1014,12 +1214,14 @@ exports.deleteHiringById = async (req, res) => {
 
     const deletedHiring = await Hiring.findByIdAndDelete(hiringId);
     if (!deletedHiring) {
-      return res.status(404).json({ error: 'Hiring information not found' });
+      return res.status(404).json({ error: "Hiring information not found" });
     }
 
-    res.status(200).json({ message: 'Hiring information deleted successfully' });
+    res
+      .status(200)
+      .json({ message: "Hiring information deleted successfully" });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
 };
