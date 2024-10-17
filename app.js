@@ -37,6 +37,8 @@ const allowedOrigins = [
   "https://admin.panel.alghawalimanpower.com",
   "https://agent.alghawalimanpower.com",
   "https://www.agent.alghawalimanpower.com",
+  "https://finance.alghawalimanpower.com",
+  "https://www.finance.alghawalimanpower.com",
   "http://localhost:5173",
   "http://localhost:3000",
 ];
