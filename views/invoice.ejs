@@ -458,19 +458,32 @@
                 S No.
               </div>
             </div>
-            <div
-              class="self-stretch p-8 bg-[#f2f2f2] border-b border-[#c2d0d3] justify-center items-center gap-2.5 inline-flex"
-            >
-              <div
-                class="grow shrink basis-0 text-[#252e31] text-[40px] font-normal  leading-[56px] tracking-wide"
-              >
-              <% if (customerData.visaChangeAmount) { %>
-                1
-              <% } else { %>
+            <% const eligibleHiringTypes = ['Monthly', 'Hired', 'On Trial'];
+              const services = [
+                { name: 'A2A Full Package', amount: customerData.services.a2aFullPackage },
+                { name: 'Medical', amount: customerData.services.medical },
+                { name: 'A2A Ticket', amount: customerData.services.a2aTicket },
+                { name: 'Visa Change', amount: customerData.services.visaChange },
+                { name: 'Uniform', amount: customerData.services.uniform },
+                ...(customerData.services.other || []).map(other => ({ name: other.name, amount: other.amount }))
+              ];
+              const eligibleServices = services.filter(service => service.amount > 0);
+            %>
+            <% if (eligibleHiringTypes.includes(invoiceType) && eligibleServices.length > 0) { %>
+              <% eligibleServices.forEach((service, index) => { %>
+                <div class="self-stretch p-8 bg-[#f2f2f2] border-b border-[#c2d0d3] justify-center items-center gap-2.5 inline-flex">
+                  <div class="grow shrink basis-0 text-[#252e31] text-[40px] font-normal leading-[56px] tracking-wide">
+                    <%= index + 1 %>
+                  </div>
+                </div>
+              <% }); %>
+            <% } else { %>
+              <div class="self-stretch p-8 bg-[#f2f2f2] border-b border-[#c2d0d3] justify-center items-center gap-2.5 inline-flex">
+                <div class="grow shrink basis-0 text-[#252e31] text-[40px] font-normal leading-[56px] tracking-wide">
                   -
-              <% } %>
+                </div>
               </div>
-            </div>
+            <% } %>
           </div>
           <div
             class="grow shrink basis-0 flex-col justify-center items-start inline-flex"
@@ -484,19 +497,21 @@
                 Description
               </div>
             </div>
-            <div
-              class="self-stretch p-8 bg-[#f2f2f2] border-b border-[#c2d0d3] justify-center items-center gap-2.5 inline-flex"
-            >
-              <div
-                class="grow shrink font-semibold basis-0 text-[#252e31] text-[40px]  leading-[56px] tracking-wide"
-              >
-                <% if (customerData.visaChangeAmount) { %>
-                  A2A Visa Change Service
-                <% } else { %>
-                    -
-                <% } %>
+            <% if (eligibleHiringTypes.includes(invoiceType) && eligibleServices.length > 0) { %>
+              <% eligibleServices.forEach(service => { %>
+                <div class="self-stretch p-8 bg-[#f2f2f2] border-b border-[#c2d0d3] justify-center items-center gap-2.5 inline-flex">
+                  <div class="grow shrink font-semibold basis-0 text-[#252e31] text-[40px] leading-[56px] tracking-wide">
+                    <%= service.name %>
+                  </div>
+                </div>
+              <% }); %>
+            <% } else { %>
+              <div class="self-stretch p-8 bg-[#f2f2f2] border-b border-[#c2d0d3] justify-center items-center gap-2.5 inline-flex">
+                <div class="grow shrink font-semibold basis-0 text-[#252e31] text-[40px] leading-[56px] tracking-wide">
+                  -
+                </div>
               </div>
-            </div>
+            <% } %>
           </div>
           <div
             class="grow shrink basis-0 flex-col justify-center items-start inline-flex"
@@ -510,19 +525,21 @@
                 Amount
               </div>
             </div>
-            <div
-              class="self-stretch p-8 bg-[#f2f2f2] border-b border-[#c2d0d3] justify-end items-center gap-2.5 inline-flex"
-            >
-              <div
-                class="grow shrink basis-0 text-right text-[#031d92] text-[40px] font-bold  leading-[56px] tracking-wide"
-              >
-              <% if (customerData.visaChangeAmount) { %>
-                <%= customerData.visaChangeAmount %>
-              <% } else { %>
+            <% if (eligibleHiringTypes.includes(invoiceType) && eligibleServices.length > 0) { %>
+              <% eligibleServices.forEach(service => { %>
+                <div class="self-stretch p-8 bg-[#f2f2f2] border-b border-[#c2d0d3] justify-end items-center gap-2.5 inline-flex">
+                  <div class="grow shrink basis-0 text-right text-[#031d92] text-[40px] font-bold leading-[56px] tracking-wide">
+                    <%= service.amount %>
+                  </div>
+                </div>
+              <% }); %>
+            <% } else { %>
+              <div class="self-stretch p-8 bg-[#f2f2f2] border-b border-[#c2d0d3] justify-end items-center gap-2.5 inline-flex">
+                <div class="grow shrink basis-0 text-right text-[#031d92] text-[40px] font-bold leading-[56px] tracking-wide">
                   -
-              <% } %>
+                </div>
               </div>
-            </div>
+            <% } %>
           </div>
         </div>
       </div>
@@ -548,7 +565,7 @@
               <div
                 class="grow shrink basis-0 font-semibold text-[#031d92] text-[40px]  leading-[56px] tracking-wide"
               >
-                Total With Additional Services
+                Total
               </div>
             </div>
           </div>
@@ -561,11 +578,20 @@
               <div
                 class="grow shrink basis-0 text-right text-[#252e31] text-[40px] font-normal  leading-[56px] tracking-wide"
               >
-              <% if (customerData.visaChangeAmount) { %>
-                <%= customerData.visaChangeAmount %>
-              <% } else { %>
-                  0
-                <% } %>
+              <% 
+                let servicesTotal = 0;
+                if (eligibleHiringTypes.includes(invoiceType)) {
+                  servicesTotal = Object.values(customerData.services).reduce((sum, service) => {
+                    if (typeof service === 'number') {
+                      return sum + service;
+                    } else if (Array.isArray(service)) {
+                      return sum + service.reduce((subSum, item) => subSum + item.amount, 0);
+                    }
+                    return sum;
+                  }, 0);
+                }
+              %>
+              <%= servicesTotal %>
               </div>
             </div>
             <div
@@ -574,11 +600,7 @@
               <div
                 class="grow shrink basis-0 font-semibold text-right text-[#031d92] text-[40px] font-bold  leading-[56px] tracking-wide"
               >
-              <% if (customerData.visaChangeAmount) { %>
-                <%= customerData.visaChangeAmount + transactionData.amount %>
-              <% } else { %>
-                <%= transactionData.amount %>
-              <% } %>
+              <%= servicesTotal + transactionData.amount %>
               </div>
             </div>
           </div>

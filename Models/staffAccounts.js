@@ -18,8 +18,8 @@ const transactionSchema = new mongoose.Schema({
 });
 
 const staffAccountSchema = new mongoose.Schema({
-  staffName: { type: String, required: true },
-  staffCode: { type: String, required: true },
+  staffName: { type: String, required: false },
+  staffCode: { type: String, required: false },
   staffRoles: [
     {
       type: Number,
@@ -27,6 +27,7 @@ const staffAccountSchema = new mongoose.Schema({
     },
   ],
   staffId: { type: String },
+  staff: { type: mongoose.Schema.Types.ObjectId, ref: "Staff" },
   balance: { type: Number, default: 0 },
   totalReceivedAmount: { type: Number, default: 0 },
   totalSentAmount: { type: Number, default: 0 },

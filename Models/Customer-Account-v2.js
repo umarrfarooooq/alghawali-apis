@@ -32,6 +32,19 @@ const customerAccountSchema = new mongoose.Schema({
   returnAmount: { type: Number, default: 0 },
   pendingReturnAmount: { type: Number, default: 0 },
   uniqueCode: { type: String, required: true },
+  services: {
+    a2aFullPackage: { type: Number, default: 0 },
+    medical: { type: Number, default: 0 },
+    a2aTicket: { type: Number, default: 0 },
+    visaChange: { type: Number, default: 0 },
+    uniform: { type: Number, default: 0 },
+    other: [
+      {
+        name: { type: String, required: true },
+        amount: { type: Number, required: true },
+      },
+    ],
+  },
   visaChangeAmount: { type: Number, default: 0 },
   uniformAmount: { type: Number, default: 0 },
   officeCharges: { type: Number, default: 0 },

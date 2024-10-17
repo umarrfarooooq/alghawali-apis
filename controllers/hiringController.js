@@ -36,6 +36,10 @@ exports.createHiringOrTrial = async (req, res) => {
       cosPhone,
       visaChangeAmount,
       uniformAmount,
+      a2aFullPackageAmount,
+      medicalAmount,
+      a2aTicketAmount,
+      otherServices,
       paymentMethod,
       receivedBy,
       hiringDate,
@@ -218,6 +222,14 @@ exports.createHiringOrTrial = async (req, res) => {
       uniqueCode,
       visaChangeAmount,
       uniformAmount,
+      services: {
+        a2aFullPackage: a2aFullPackageAmount,
+        medical: medicalAmount,
+        a2aTicket: a2aTicketAmount,
+        visaChange: visaChangeAmount,
+        uniform: uniformAmount,
+        other: otherServices,
+      },
       profileHiringStatus: isTrial
         ? "On Trial"
         : isMonthlyHiring
@@ -517,6 +529,10 @@ exports.replaceMaid = async (req, res) => {
       newMaid.isHired = customerAccount.profileHiringStatus === "Hired";
       newMaid.isMonthlyHired =
         customerAccount.profileHiringStatus === "Monthly Hired";
+      newMaid.monthlyHireEndDate =
+        customerAccount.profileHiringStatus === "Monthly Hired"
+          ? customerAccount.monthlyHireEndDate
+          : null;
       newMaid.isOnTrial = customerAccount.profileHiringStatus === "On Trial";
       newMaid.hiringDate = new Date(replaceDate);
 
@@ -552,6 +568,57 @@ exports.replaceMaid = async (req, res) => {
     return res
       .status(500)
       .json({ error: "An error occurred while replacing the maid" });
+  } finally {
+    if (session) {
+      session.endSession();
+    }
+  }
+};
+
+exports.convertTrialToPermanentHire = async (req, res) => {
+  let session;
+  try {
+    session = await mongoose.startSession();
+    await session.withTransaction(async () => {
+      const { customerAccountId } = req.body;
+
+      const customerAccount = await CustomerAccountV2.findById(
+        customerAccountId
+      )
+        .populate("maid")
+        .session(session);
+
+      if (!customerAccount) {
+        throw new Error("Customer account not found");
+      }
+
+      if (customerAccount.profileHiringStatus !== "On Trial") {
+        throw new Error("This customer account is not currently on trial");
+      }
+
+      const maid = customerAccount.maid;
+
+      customerAccount.profileHiringStatus = "Hired";
+      maid.isOnTrial = false;
+      maid.isHired = true;
+      maid.trialEndDate = null;
+
+      await customerAccount.save({ session });
+      await maid.save({ session });
+
+      res.status(200).json({
+        message: "Trial successfully converted to permanent hire",
+        customerAccount,
+        maid,
+      });
+    });
+  } catch (error) {
+    console.error("Error in convertTrialToPermanentHire:", error);
+    res.status(400).json({
+      error:
+        error.message ||
+        "An error occurred while converting the trial to a permanent hire",
+    });
   } finally {
     if (session) {
       session.endSession();

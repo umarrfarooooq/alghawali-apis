@@ -1,5 +1,6 @@
 const CustomerAccount = require("../Models/Cos.Accounts");
 const CustomerAccountV2 = require("../Models/Customer-Account-v2");
+const Staff = require("../Models/Staff");
 const Transaction = require("../Models/Transaction");
 const StaffAccount = require("../Models/staffAccounts");
 const roles = require("../config/roles");
@@ -45,6 +46,67 @@ exports.addStaffAccount = async (req, res) => {
   }
 };
 
+exports.createStaffAccount = async (req, res) => {
+  try {
+    const { staffId } = req.body;
+
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(404).json({ error: "Staff not found" });
+    }
+
+    if (
+      !staff.roles.includes(roles.canAccessOnAccounts) &&
+      !staff.roles.includes(roles.fullAccessOnAccounts)
+    ) {
+      return res.status(403).json({
+        error: "Staff does not have the required role to access accounts",
+      });
+    }
+
+    const existingAccount = await StaffAccount.findOne({
+      staffId: staff.staffId,
+    });
+    if (existingAccount) {
+      if (!staff.staffAccountId) {
+        staff.staffAccountId = existingAccount._id;
+        await staff.save();
+        return res.status(200).json({
+          message: "Staff account ID updated successfully",
+          staffAccount: existingAccount,
+        });
+      }
+      return res.status(400).json({
+        error: "A staff account already exists for this staff member",
+      });
+    }
+
+    const newStaffAccount = new StaffAccount({
+      staff: staffId,
+      staffName: staff.fullName,
+      staffCode: staff.staffCode,
+      staffRoles: staff.roles,
+      staffId: staff.staffId,
+    });
+
+    await newStaffAccount.save();
+
+    staff.staffAccountId = newStaffAccount._id;
+    await staff.save();
+
+    res.status(201).json({
+      message: "Staff account created successfully",
+      staffAccount: newStaffAccount,
+    });
+  } catch (error) {
+    console.error("Error in createStaffAccount:", error);
+    res.status(400).json({
+      error:
+        error.message || "An error occurred while creating the staff account",
+    });
+  }
+};
+
 exports.getAllAccounts = async (req, res) => {
   try {
     const allAccounts = await StaffAccount.find();
@@ -71,6 +133,31 @@ exports.getAllAccountNamesAndId = async (req, res) => {
       id: account._id.toString(),
       name: account.staffName,
     }));
+    res.status(200).json(staffData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
+
+exports.getAllValidStaffForAccount = async (req, res) => {
+  try {
+    const validStaff = await Staff.find(
+      {
+        $or: [
+          { roles: roles.canAccessOnAccounts },
+          { roles: roles.fullAccessOnAccounts },
+        ],
+        staffAccountId: { $exists: false },
+      },
+      "fullName _id"
+    );
+
+    const staffData = validStaff.map((staff) => ({
+      id: staff._id.toString(),
+      staffName: staff.fullName,
+    }));
+
     res.status(200).json(staffData);
   } catch (error) {
     console.error(error);
@@ -1046,11 +1133,9 @@ exports.getAllAccountSummaryWithFilters = async (req, res) => {
       const parsedEndDate = new Date(endDate);
 
       if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
-        return res
-          .status(400)
-          .json({
-            error: "Invalid date format. Please use YYYY-MM-DD format.",
-          });
+        return res.status(400).json({
+          error: "Invalid date format. Please use YYYY-MM-DD format.",
+        });
       }
 
       dateFilter = {
@@ -1179,21 +1264,26 @@ exports.getAllAccountsTransactionHistory = async (req, res) => {
     const startDate = req.query.startDate;
     const endDate = req.query.endDate;
     let dateFilter = {};
+    let customerDateFilter = {};
 
     if (startDate && endDate) {
       const parsedStartDate = new Date(startDate);
       const parsedEndDate = new Date(endDate);
 
       if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
-        return res
-          .status(400)
-          .json({
-            error: "Invalid date format. Please use YYYY-MM-DD format.",
-          });
+        return res.status(400).json({
+          error: "Invalid date format. Please use YYYY-MM-DD format.",
+        });
       }
 
       dateFilter = {
         date: {
+          $gte: parsedStartDate,
+          $lte: parsedEndDate,
+        },
+      };
+      customerDateFilter = {
+        hiringDate: {
           $gte: parsedStartDate,
           $lte: parsedEndDate,
         },
@@ -1217,6 +1307,7 @@ exports.getAllAccountsTransactionHistory = async (req, res) => {
           });
       }
       dateFilter = { date: { $gte: periodStartDate } };
+      customerDateFilter = { hiringDate: { $gte: periodStartDate } };
     }
 
     // Fetch all transactions for total till now calculations
@@ -1229,6 +1320,12 @@ exports.getAllAccountsTransactionHistory = async (req, res) => {
       .populate("receivedBy")
       .populate("sendedBy");
 
+    const allCustomerAccounts = await CustomerAccountV2.find();
+
+    const filteredCustomerAccounts = await CustomerAccountV2.find(
+      customerDateFilter
+    );
+
     let totalReceived = 0;
     let totalSent = 0;
     let totalBalance = 0;
@@ -1238,6 +1335,43 @@ exports.getAllAccountsTransactionHistory = async (req, res) => {
     let totalTillNowSent = 0;
     let totalPendingReceivedTillNow = 0;
     let totalPendingSentTillNow = 0;
+
+    let serviceTotals = {
+      a2aFullPackage: 0,
+      medical: 0,
+      a2aTicket: 0,
+      visaChange: 0,
+      uniform: 0,
+      other: 0,
+    };
+
+    let serviceTotalsAllTime = { ...serviceTotals };
+
+    filteredCustomerAccounts.forEach((account) => {
+      Object.keys(serviceTotals).forEach((service) => {
+        if (service === "other") {
+          serviceTotals.other += account.services.other.reduce(
+            (sum, item) => sum + item.amount,
+            0
+          );
+        } else {
+          serviceTotals[service] += account.services[service] || 0;
+        }
+      });
+    });
+
+    allCustomerAccounts.forEach((account) => {
+      Object.keys(serviceTotalsAllTime).forEach((service) => {
+        if (service === "other") {
+          serviceTotalsAllTime.other += account.services.other.reduce(
+            (sum, item) => sum + item.amount,
+            0
+          );
+        } else {
+          serviceTotalsAllTime[service] += account.services[service] || 0;
+        }
+      });
+    });
 
     // Calculate totals for all transactions (till now)
     allTransactions.forEach((transaction) => {
@@ -1285,6 +1419,8 @@ exports.getAllAccountsTransactionHistory = async (req, res) => {
       totalTillNowSent,
       totalPendingReceivedTillNow,
       totalPendingSentTillNow,
+      serviceTotals,
+      serviceTotalsAllTime,
       period: period || "custom",
       startDate:
         startDate ||

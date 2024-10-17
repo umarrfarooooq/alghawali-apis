@@ -27,7 +27,12 @@ router.get(
   checkPermission(roles.ShowOurMaid) || checkPermission(roles.CanEditMaid),
   maidController.getAllMaidsWithMontlyHired
 );
-
+router.get(
+  "/onTrial",
+  verifyStaffToken,
+  checkPermission(roles.ShowOurMaid) || checkPermission(roles.CanEditMaid),
+  maidController.getAllOnTrialMaids
+);
 router.get(
   "/withMonthlyHired/:staffId",
   verifyStaffToken,
@@ -42,6 +47,11 @@ router.get(
   "/byStaff/non-hired/:staffId",
   verifyStaffToken,
   maidController.getAllNonHiredMaidsByStaffId
+);
+router.get(
+  "/byStaff/onTrial/:staffId",
+  verifyStaffToken,
+  maidController.getAllOnTrialMaidsByStaffId
 );
 
 router.post(

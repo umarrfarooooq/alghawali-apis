@@ -126,11 +126,7 @@ const generateInvoice = async (
       );
       const termsConditionsPdfBuffer = await fs.readFile(termsConditionsPath);
 
-      finalPdfBuffer = await mergePDFs(
-        invoicePdfBuffer,
-        trialPaperPdfBuffer,
-        termsConditionsPdfBuffer
-      );
+      finalPdfBuffer = await mergePDFs(invoicePdfBuffer, trialPaperPdfBuffer);
     }
 
     await browser.close();
@@ -173,11 +169,9 @@ const getTrialPaperTemplatePath = (country, agencyType) => {
 const mergePDFs = async (
   invoicePdfBuffer,
   trialPaperPdfBuffer,
-  termsConditionsPdfBuffer
 ) => {
   const invoicePdf = await PDFDocument.load(invoicePdfBuffer);
   const trialPaperPdf = await PDFDocument.load(trialPaperPdfBuffer);
-  const termsConditionsPdf = await PDFDocument.load(termsConditionsPdfBuffer);
 
   const mergedPdf = await PDFDocument.create();
 
@@ -191,7 +185,6 @@ const mergePDFs = async (
 
   await copyPages(invoicePdf);
   await copyPages(trialPaperPdf);
-  await copyPages(termsConditionsPdf);
 
   return await mergedPdf.save();
 };

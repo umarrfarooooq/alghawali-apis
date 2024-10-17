@@ -61,7 +61,6 @@ exports.createStaff = async (req, res) => {
       return res.status(400).json({ error: "Email already exists" });
     }
 
-    const hasAccountsRole = userRoles.includes(roles.canAccessOnAccounts);
     let savedStaff, savedStaffAccount;
 
     const newStaff = new Staff({
@@ -73,29 +72,6 @@ exports.createStaff = async (req, res) => {
     });
 
     savedStaff = await newStaff.save();
-
-    if (hasAccountsRole) {
-      let staffCode;
-      do {
-        staffCode = generateUniqueCode();
-      } while (await StaffAccount.findOne({ staffCode }));
-      const existingStaffAccount = await StaffAccount.findOne({
-        staffName: fullName,
-      });
-
-      if (existingStaffAccount)
-        return res.status(400).json({ error: "Staff account already exists" });
-
-      const newStaffAccount = new StaffAccount({
-        staffName: fullName,
-        staffCode,
-        staffRoles: userRoles || [],
-        staffId: savedStaff._id,
-      });
-      savedStaffAccount = await newStaffAccount.save();
-      savedStaff.staffAccountId = savedStaffAccount._id;
-      await savedStaff.save();
-    }
 
     res
       .status(201)
@@ -137,38 +113,9 @@ exports.updateStaffById = async (req, res) => {
     const staffId = req.params.id;
     const updatedStaffData = req.body;
 
-    const hasAccountsRole =
-      updatedStaffData.roles &&
-      updatedStaffData.roles.includes(roles.canAccessOnAccounts);
-
     const existingStaff = await Staff.findById(staffId);
     if (!existingStaff) {
       return res.status(404).json({ error: "Staff member not found" });
-    }
-
-    if (hasAccountsRole) {
-      if (!existingStaff.staffAccountId) {
-        let staffCode;
-        do {
-          staffCode = generateUniqueCode();
-        } while (await StaffAccount.findOne({ staffCode }));
-
-        const newStaffAccount = new StaffAccount({
-          staffName: updatedStaffData.fullName,
-          staffCode,
-          staffRoles: updatedStaffData.roles,
-          staffId: existingStaff._id,
-        });
-
-        const savedStaffAccount = await newStaffAccount.save();
-
-        existingStaff.staffAccountId = savedStaffAccount._id;
-        await existingStaff.save();
-      } else {
-        await StaffAccount.findByIdAndUpdate(existingStaff.staffAccountId, {
-          staffName: updatedStaffData.fullName,
-        });
-      }
     }
 
     const updatedStaff = await Staff.findByIdAndUpdate(
@@ -232,7 +179,7 @@ exports.loginStaff = async (req, res) => {
       staffId: staff._id,
       staffRoles: staffRoles,
       staffName: staff.fullName,
-      staffAccountId: staff.staffAccountId
+      staffAccountId: staff.staffAccountId,
     };
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET_KEY, {
       expiresIn: "1d",
@@ -263,6 +210,9 @@ exports.loginAccountsStaff = async (req, res) => {
     const hasAccountsRole = staff.roles.includes(
       roles.canAccessOnAccounts || roles.fullAccessOnAccounts
     );
+    if (!staff.staffAccountId) {
+      return res.status(401).json({ error: "Your Account is not ready yet" });
+    }
     if (!hasAccountsRole) {
       return res
         .status(401)
@@ -277,7 +227,7 @@ exports.loginAccountsStaff = async (req, res) => {
       staffId: staff._id,
       staffRoles: staffRoles,
       staffName: staff.fullName,
-      staffAccountId: staff.staffAccountId
+      staffAccountId: staff.staffAccountId,
     };
     const token = jwt.sign(tokenPayload, process.env.JWT_SECRET_KEY, {
       expiresIn: "1d",

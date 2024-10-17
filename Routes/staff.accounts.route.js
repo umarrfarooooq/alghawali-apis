@@ -6,6 +6,13 @@ const checkPermission = require("../middlewears/checkPermission");
 const roles = require("../config/roles");
 const staffAccountController = require("../controllers/staff.accountsController");
 
+router.post(
+  "/create-account",
+  verifyStaffToken,
+  checkPermission(roles.fullAccessOnAccounts),
+  staffAccountController.createStaffAccount
+);
+
 router.get(
   "/all-accounts",
   verifyStaffToken,
@@ -27,6 +34,12 @@ router.get(
 router.get(
   "/all-account-names-id",
   staffAccountController.getAllAccountNamesAndId
+);
+router.get(
+  "/all-valid-staff",
+  verifyStaffToken,
+  checkPermission(roles.fullAccessOnAccounts),
+  staffAccountController.getAllValidStaffForAccount
 );
 router.get(
   "/all-accounts-summary",

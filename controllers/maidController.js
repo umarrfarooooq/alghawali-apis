@@ -642,6 +642,35 @@ exports.getAllMaidsWithMontlyHired = async (req, res) => {
     res.status(500).json({ error: "An error occurred" });
   }
 };
+exports.getAllOnTrialMaids = async (req, res) => {
+  try {
+    const { search, page = 1 } = req.query;
+
+    let query = {};
+
+    const maidCount = await Maid.countDocuments(query);
+
+    const perPage = maidCount > 0 ? maidCount : 15;
+
+    if (search) {
+      query = {
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { code: { $regex: search, $options: "i" } },
+        ],
+      };
+    }
+
+    const offset = (page - 1) * perPage;
+
+    const allMaids = await Maid.find(query).skip(offset).limit(Number(perPage));
+
+    const availableMaids = allMaids.filter((maid) => maid.isOnTrial);
+    res.status(200).json(availableMaids);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
 
 exports.getAllHiredMaidsByStaffId = async (req, res) => {
   try {
@@ -668,6 +697,21 @@ exports.getAllMonthlyHiredMaidsByStaffId = async (req, res) => {
 
     const maidsByStaff = await Maid.find({ staffId: staffId });
     const availableMaids = maidsByStaff.filter((maid) => maid.isMonthlyHired);
+    res.status(200).json(availableMaids);
+  } catch (error) {
+    res.status(500).json({ error: "An error occurred" });
+  }
+};
+exports.getAllOnTrialMaidsByStaffId = async (req, res) => {
+  try {
+    const { staffId } = req.params;
+
+    if (!staffId) {
+      return res.status(400).json({ error: "Staff ID is required" });
+    }
+
+    const maidsByStaff = await Maid.find({ staffId: staffId });
+    const availableMaids = maidsByStaff.filter((maid) => maid.isOnTrial);
     res.status(200).json(availableMaids);
   } catch (error) {
     res.status(500).json({ error: "An error occurred" });
@@ -734,14 +778,17 @@ exports.getMaidsInfo = async (req, res) => {
     const monthlyHiredMaids = await Maid.countDocuments({
       isMonthlyHired: true,
     });
+    const onTrialMaids = await Maid.countDocuments({ isOnTrial: true });
     const unhiredMaids = await Maid.countDocuments({
       isHired: false,
       isMonthlyHired: false,
+      isOnTrial: false,
     });
-    const remainingMaids = totalMaids - hiredMaids - monthlyHiredMaids;
+    const remainingMaids =
+      totalMaids - hiredMaids - monthlyHiredMaids - onTrialMaids;
 
     const unHiredNationalityInfo = await Maid.aggregate([
-      { $match: { isHired: false, isMonthlyHired: false } },
+      { $match: { isHired: false, isMonthlyHired: false, isOnTrial: false } },
       { $group: { _id: "$nationality", count: { $sum: 1 } } },
     ]);
 
@@ -752,6 +799,10 @@ exports.getMaidsInfo = async (req, res) => {
 
     const monthlyHiredNationalityInfo = await Maid.aggregate([
       { $match: { isMonthlyHired: true } },
+      { $group: { _id: "$nationality", count: { $sum: 1 } } },
+    ]);
+    const onTrialNationalityInfo = await Maid.aggregate([
+      { $match: { isOnTrial: true } },
       { $group: { _id: "$nationality", count: { $sum: 1 } } },
     ]);
 
@@ -779,15 +830,22 @@ exports.getMaidsInfo = async (req, res) => {
       allNationalityCount[nationality._id] = nationality.count;
     });
 
+    const onTrialNationalityCount = {};
+    onTrialNationalityInfo.forEach((nationality) => {
+      onTrialNationalityCount[nationality._id] = nationality.count;
+    });
+
     res.status(200).json({
       totalMaids,
       hiredMaids,
       monthlyHiredMaids,
+      onTrialMaids,
       unhiredMaids,
       remainingMaids,
       unHiredNationalityCount,
       hiredNationalityCount,
       monthlyHiredNationalityCount,
+      onTrialNationalityCount,
       allNationalityCount,
     });
   } catch (error) {
