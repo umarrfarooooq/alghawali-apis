@@ -780,17 +780,28 @@ exports.getMaidsInfo = async (req, res) => {
     });
     const onTrialMaids = await Maid.countDocuments({ isOnTrial: true });
     const unhiredMaids = await Maid.countDocuments({
-      isHired: false,
-      isMonthlyHired: false,
-      isOnTrial: false,
+      $and: [
+        { $or: [{ isHired: { $exists: false } }, { isHired: false }] },
+        { $or: [{ isMonthlyHired: { $exists: false } }, { isMonthlyHired: false }] },
+        { $or: [{ isOnTrial: { $exists: false } }, { isOnTrial: false }] }
+      ]
     });
+    const unHiredNationalityInfo = await Maid.aggregate([
+      {
+        $match: {
+          $and: [
+            { $or: [{ isHired: { $exists: false } }, { isHired: false }] },
+            { $or: [{ isMonthlyHired: { $exists: false } }, { isMonthlyHired: false }] },
+            { $or: [{ isOnTrial: { $exists: false } }, { isOnTrial: false }] }
+          ]
+        }
+      },
+      { $group: { _id: "$nationality", count: { $sum: 1 } } },
+    ]);
     const remainingMaids =
       totalMaids - hiredMaids - monthlyHiredMaids - onTrialMaids;
 
-    const unHiredNationalityInfo = await Maid.aggregate([
-      { $match: { isHired: false, isMonthlyHired: false, isOnTrial: false } },
-      { $group: { _id: "$nationality", count: { $sum: 1 } } },
-    ]);
+    
 
     const hiredNationalityInfo = await Maid.aggregate([
       { $match: { isHired: true } },
