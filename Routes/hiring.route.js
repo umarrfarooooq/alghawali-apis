@@ -25,7 +25,12 @@ router.post(
   checkPermission(roles.canAccessOnAccounts),
   hiringController.updateCustomerPayment
 );
-
+router.post(
+  "/unhire-maid/:maidId",
+  verifyStaffToken,
+  checkPermission(roles.fullAccessOnAccounts),
+  hiringController.unhireMaid
+);
 router.post(
   "/:id",
   verifyStaffToken,

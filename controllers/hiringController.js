@@ -1223,6 +1223,74 @@ exports.editTransaction = async (req, res) => {
   }
 };
 
+exports.unhireMaid = async (req, res) => {
+  let session;
+  try {
+    session = await mongoose.startSession();
+
+    const result = await session.withTransaction(async () => {
+      const { maidId } = req.params;
+
+      if (!isValidObjectId(maidId)) {
+        throw new Error("Invalid maid ID format");
+      }
+
+      const maid = await Maid.findById(maidId).session(session);
+      if (!maid) {
+        throw new Error("Maid not found");
+      }
+
+      if (!maid.isHired && !maid.isMonthlyHired && !maid.isOnTrial) {
+        throw new Error("Maid is not currently hired");
+      }
+
+      const customerAccount = await CustomerAccountV2.findOne({
+        maid: maidId,
+        profileHiringStatus: { $in: ["Hired", "Monthly Hired", "On Trial"] },
+      }).session(session);
+
+      if (customerAccount) {
+        throw new Error(
+          "Maid has an active customer account and cannot be unhired directly"
+        );
+      }
+
+      maid.isOnTrial = false;
+      maid.isHired = false;
+      maid.isMonthlyHired = false;
+      maid.hiringDate = null;
+      maid.monthlyHireEndDate = null;
+      maid.trialEndDate = null;
+
+      await maid.save({ session });
+
+      return {
+        message: "Maid unhired successfully",
+        maid: {
+          id: maid._id,
+          name: maid.name,
+          status: "Unhired",
+        },
+      };
+    });
+
+    if (result) {
+      res.status(200).json(result);
+    }
+  } catch (error) {
+    console.error("Error in unhireMaid:", error);
+    res
+      .status(400)
+      .json({
+        error: error.message || "An error occurred while unhiring the maid",
+      });
+  } finally {
+    if (session) {
+      session.endSession();
+    }
+  }
+};
+
 const updateExpiredMonthlyHires = async () => {
   const session = await mongoose.startSession();
 
