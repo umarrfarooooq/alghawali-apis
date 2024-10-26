@@ -41,6 +41,7 @@ const allowedOrigins = [
   "https://www.finance.alghawalimanpower.com",
   "http://localhost:5173",
   "http://localhost:3000",
+  "http://localhost:8090",
 ];
 
 const corsOptions = {

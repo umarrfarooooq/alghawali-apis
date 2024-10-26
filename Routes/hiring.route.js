@@ -31,6 +31,14 @@ router.post(
   checkPermission(roles.fullAccessOnAccounts),
   hiringController.unhireMaid
 );
+
+router.post(
+  "/mark-permanent",
+  verifyStaffToken,
+  checkPermission(roles.canAccessOnAccounts),
+  hiringController.convertTrialToPermanentHire
+);
+
 router.post(
   "/:id",
   verifyStaffToken,
