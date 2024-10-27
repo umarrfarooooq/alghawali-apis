@@ -349,7 +349,7 @@ exports.getStaffTransactionsSummary = async (req, res) => {
         else if (status === "Approved") summary.approved.received += amount;
         else if (status === "Rejected") summary.rejected.received += amount;
 
-        if (status === "Approved") {
+        if (status === "Approved" || status === "Pending") {
           if (paymentMethod === "Cash") {
             summary.received.Cash += amount;
           } else if (paymentMethod === "Cheque") {
@@ -366,7 +366,7 @@ exports.getStaffTransactionsSummary = async (req, res) => {
         else if (status === "Approved") summary.approved.sent += amount;
         else if (status === "Rejected") summary.rejected.sent += amount;
 
-        if (status === "Approved") {
+        if (status === "Approved" || status === "Pending") {
           if (paymentMethod === "Cash") {
             summary.sent.Cash += amount;
           } else if (paymentMethod === "Cheque") {
@@ -474,7 +474,7 @@ exports.getMyTransactionsSummary = async (req, res) => {
         else if (status === "Approved") summary.approved.received += amount;
         else if (status === "Rejected") summary.rejected.received += amount;
 
-        if (status === "Approved") {
+        if (status === "Approved" || status === "Pending") {
           if (paymentMethod === "Cash") {
             summary.received.Cash += amount;
           } else if (paymentMethod === "Cheque") {
@@ -491,7 +491,7 @@ exports.getMyTransactionsSummary = async (req, res) => {
         else if (status === "Approved") summary.approved.sent += amount;
         else if (status === "Rejected") summary.rejected.sent += amount;
 
-        if (status === "Approved") {
+        if (status === "Approved" || status === "Pending") {
           if (paymentMethod === "Cash") {
             summary.sent.Cash += amount;
           } else if (paymentMethod === "Cheque") {
