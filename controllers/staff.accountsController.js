@@ -211,8 +211,14 @@ exports.getAccountDetailsById = async (req, res) => {
       return res.status(404).json({ error: "Account not found for Staff ID" });
     }
 
-    const { balance, totalReceivedAmount, totalSentAmount, accountHistory } =
-      accountOfStaffId;
+    const {
+      balance,
+      totalReceivedAmount,
+      pendingReceivedAmount,
+      totalSentAmount,
+      pendingSentAmount,
+      accountHistory,
+    } = accountOfStaffId;
 
     let filteredHistory = accountHistory;
     let start, end;
@@ -255,6 +261,8 @@ exports.getAccountDetailsById = async (req, res) => {
       balance,
       totalReceivedAmount,
       totalSentAmount,
+      pendingReceivedAmount,
+      pendingSentAmount,
       accountHistory: filteredHistory,
       filterParams: {
         period: period || "all",
@@ -389,7 +397,12 @@ exports.transferAmount = async (req, res) => {
         throw new Error("Receiver account not found");
       }
 
-      if (senderAccount.balance < amount) {
+      const senderReceivedAmount =
+        senderAccount.receivedAmount + senderAccount.pendingReceivedAmount;
+      const senderSentAmount =
+        senderAccount.sentAmount + senderAccount.pendingSentAmount;
+
+      if (senderReceivedAmount - senderSentAmount < amount) {
         throw new Error("Insufficient Balance");
       }
 
