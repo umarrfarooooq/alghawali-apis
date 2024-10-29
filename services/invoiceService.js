@@ -135,9 +135,9 @@ const generateInvoice = async (
     const pdfFilePath = path.join(
       __dirname,
       "..",
-      "uploads",
+      "uploads", 
       "invoices",
-      `${currentDateTime}_invoice.pdf`
+      `${customerData?.customerName}_${currentDateTime}_invoice.pdf`
     );
 
     await fs.mkdir(path.dirname(pdfFilePath), { recursive: true });
