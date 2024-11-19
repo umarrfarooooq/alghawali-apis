@@ -586,7 +586,7 @@ exports.getAllHiredMaids = async (req, res) => {
 
 exports.getAllMaidsWithHired = async (req, res) => {
   try {
-    const { search, page = 1 } = req.query;
+    const { search, countries, page = 1 } = req.query;
 
     let query = {};
 
@@ -601,6 +601,9 @@ exports.getAllMaidsWithHired = async (req, res) => {
           { code: { $regex: search, $options: "i" } },
         ],
       };
+    }
+    if (countries && countries.length > 0) {
+      query.nationality = { $in: countries };
     }
 
     const offset = (page - 1) * perPage;
@@ -615,7 +618,7 @@ exports.getAllMaidsWithHired = async (req, res) => {
 };
 exports.getAllMaidsWithMontlyHired = async (req, res) => {
   try {
-    const { search, page = 1 } = req.query;
+    const { search, countries, page = 1 } = req.query;
 
     let query = {};
 
@@ -631,6 +634,9 @@ exports.getAllMaidsWithMontlyHired = async (req, res) => {
         ],
       };
     }
+    if (countries && countries.length > 0) {
+      query.nationality = { $in: countries };
+    }
 
     const offset = (page - 1) * perPage;
 
@@ -644,7 +650,7 @@ exports.getAllMaidsWithMontlyHired = async (req, res) => {
 };
 exports.getAllOnTrialMaids = async (req, res) => {
   try {
-    const { search, page = 1 } = req.query;
+    const { search, countries, page = 1 } = req.query;
 
     let query = {};
 
@@ -659,6 +665,9 @@ exports.getAllOnTrialMaids = async (req, res) => {
           { code: { $regex: search, $options: "i" } },
         ],
       };
+    }
+    if (countries && countries.length > 0) {
+      query.nationality = { $in: countries };
     }
 
     const offset = (page - 1) * perPage;
@@ -674,13 +683,26 @@ exports.getAllOnTrialMaids = async (req, res) => {
 
 exports.getAllHiredMaidsByStaffId = async (req, res) => {
   try {
+    const { search, countries, page = 1 } = req.query;
     const { staffId } = req.params;
 
     if (!staffId) {
       return res.status(400).json({ error: "Staff ID is required" });
     }
+    let query = {};
+    if (search) {
+      query = {
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { code: { $regex: search, $options: "i" } },
+        ],
+      };
+    }
+    if (countries && countries.length > 0) {
+      query.nationality = { $in: countries };
+    }
 
-    const maidsByStaff = await Maid.find({ staffId: staffId });
+    const maidsByStaff = await Maid.find({ staffId: staffId, ...query });
     const availableMaids = maidsByStaff.filter((maid) => maid.isHired);
     res.status(200).json(availableMaids);
   } catch (error) {
@@ -689,13 +711,26 @@ exports.getAllHiredMaidsByStaffId = async (req, res) => {
 };
 exports.getAllMonthlyHiredMaidsByStaffId = async (req, res) => {
   try {
+    const { search, countries, page = 1 } = req.query;
     const { staffId } = req.params;
 
     if (!staffId) {
       return res.status(400).json({ error: "Staff ID is required" });
     }
+    let query = {};
+    if (search) {
+      query = {
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { code: { $regex: search, $options: "i" } },
+        ],
+      };
+    }
+    if (countries && countries.length > 0) {
+      query.nationality = { $in: countries };
+    }
 
-    const maidsByStaff = await Maid.find({ staffId: staffId });
+    const maidsByStaff = await Maid.find({ staffId: staffId, ...query });
     const availableMaids = maidsByStaff.filter((maid) => maid.isMonthlyHired);
     res.status(200).json(availableMaids);
   } catch (error) {
@@ -704,13 +739,26 @@ exports.getAllMonthlyHiredMaidsByStaffId = async (req, res) => {
 };
 exports.getAllOnTrialMaidsByStaffId = async (req, res) => {
   try {
+    const { search, countries, page = 1 } = req.query;
     const { staffId } = req.params;
 
     if (!staffId) {
       return res.status(400).json({ error: "Staff ID is required" });
     }
+    let query = {};
+    if (search) {
+      query = {
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { code: { $regex: search, $options: "i" } },
+        ],
+      };
+    }
+    if (countries && countries.length > 0) {
+      query.nationality = { $in: countries };
+    }
 
-    const maidsByStaff = await Maid.find({ staffId: staffId });
+    const maidsByStaff = await Maid.find({ staffId: staffId, ...query });
     const availableMaids = maidsByStaff.filter((maid) => maid.isOnTrial);
     res.status(200).json(availableMaids);
   } catch (error) {
@@ -720,13 +768,26 @@ exports.getAllOnTrialMaidsByStaffId = async (req, res) => {
 
 exports.getAllNonHiredMaidsByStaffId = async (req, res) => {
   try {
+    const { search, countries, page = 1 } = req.query;
     const { staffId } = req.params;
 
     if (!staffId) {
       return res.status(400).json({ error: "Staff ID is required" });
     }
+    let query = {};
+    if (search) {
+      query = {
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { code: { $regex: search, $options: "i" } },
+        ],
+      };
+    }
+    if (countries && countries.length > 0) {
+      query.nationality = { $in: countries };
+    }
 
-    const maidsByStaff = await Maid.find({ staffId: staffId });
+    const maidsByStaff = await Maid.find({ staffId: staffId, ...query });
     const availableMaids = maidsByStaff.filter((maid) => !maid.isHired);
     res.status(200).json(availableMaids);
   } catch (error) {
