@@ -13,7 +13,6 @@ mongoose.set("strictQuery", true);
 
 let mongoUri = process.env.MONGO_URL;
 
-
 mongoose
   .connect(mongoUri, {
     useNewUrlParser: true,
@@ -90,6 +89,7 @@ const agentRegistration = require("./Routes/agentRegister.route");
 const hiringRoute = require("./Routes/hiring.route");
 const transactionRoute = require("./Routes/transaction.route");
 const invoiceRoute = require("./controllers/invoiceController");
+const notificationRoute = require("./Routes/notification.route");
 
 // API'S
 app.use("/api/v1/maids", maidRoutes);
@@ -106,7 +106,7 @@ app.use("/api/v1/agentMaids", agentMaidsRoute);
 app.use("/api/v1/agentRegister", agentRegistration);
 app.use("/api/v2/hiring", hiringRoute);
 app.use("/api/v1/transaction", transactionRoute);
-
+app.use("/api/v1/notifications", notificationRoute);
 // Pages
 app.use("/cv", cvRoute);
 app.use("/invoice", invoiceRoute);

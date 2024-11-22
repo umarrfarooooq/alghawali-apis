@@ -9,6 +9,11 @@ const sharp = require("sharp");
 const { v4: uuidv4 } = require("uuid");
 const Transaction = require("../Models/Transaction");
 const { generateInvoice } = require("../services/invoiceService");
+const {
+  createMonthlyHireExpiryNotification,
+  createTrialExpiryNotification,
+} = require("../services/notificationService");
+
 const fs = require("fs").promises;
 
 function generateUniqueCode() {
@@ -1279,11 +1284,9 @@ exports.unhireMaid = async (req, res) => {
     }
   } catch (error) {
     console.error("Error in unhireMaid:", error);
-    res
-      .status(400)
-      .json({
-        error: error.message || "An error occurred while unhiring the maid",
-      });
+    res.status(400).json({
+      error: error.message || "An error occurred while unhiring the maid",
+    });
   } finally {
     if (session) {
       session.endSession();
@@ -1297,26 +1300,37 @@ const updateExpiredMonthlyHires = async () => {
   try {
     await session.withTransaction(async () => {
       const now = new Date();
-      const expiredMonthlyHires = await Maid.find({
-        isMonthlyHired: true,
+      const expiredMonthlyHires = await CustomerAccountV2.find({
+        profileHiringStatus: "Monthly Hired",
         monthlyHireEndDate: { $lte: now },
-      }).session(session);
+      })
+        .populate("maid")
+        .populate("staff")
+        .session(session);
 
-      for (const maid of expiredMonthlyHires) {
-        maid.isMonthlyHired = false;
-        maid.monthlyHireEndDate = null;
-        await maid.save({ session });
+      for (const customerAccount of expiredMonthlyHires) {
+        try {
+          if (customerAccount.maid) {
+            customerAccount.maid.isMonthlyHired = false;
+            customerAccount.maid.monthlyHireEndDate = null;
+            await customerAccount.maid.save({ session });
+          }
 
-        const customerAccount = await CustomerAccountV2.findOne({
-          maid: maid._id,
-          profileHiringStatus: "Monthly Hired",
-        })
-          .sort({ _id: -1 })
-          .session(session);
-
-        if (customerAccount) {
           customerAccount.profileHiringStatus = "Completed";
           await customerAccount.save({ session });
+
+          if (customerAccount.staff) {
+            await createMonthlyHireExpiryNotification({
+              maid: customerAccount.maid,
+              customer: customerAccount,
+              staffId: customerAccount.staff._id,
+            });
+          }
+        } catch (error) {
+          console.error(
+            `Error processing monthly hire expiry for customer account ${customerAccount._id}:`,
+            error
+          );
         }
       }
 
@@ -1334,26 +1348,62 @@ const updateExpiredMonthlyHires = async () => {
 };
 
 const updateExpiredTrials = async () => {
-  const now = new Date();
+  const session = await mongoose.startSession();
+
   try {
-    const result = await CustomerAccountV2.updateMany(
-      {
+    await session.withTransaction(async () => {
+      const now = new Date();
+
+      const expiredTrials = await CustomerAccountV2.find({
         profileHiringStatus: "On Trial",
         trialStatus: "Active",
         trialEndDate: { $lte: now },
-      },
-      {
-        $set: { trialStatus: "Expired" },
+      })
+        .populate("maid")
+        .populate("staff")
+        .session(session);
+
+      for (const customerAccount of expiredTrials) {
+        try {
+          customerAccount.trialStatus = "Expired";
+          await customerAccount.save({ session });
+
+          if (customerAccount.staff && customerAccount.maid) {
+            await createTrialExpiryNotification({
+              maid: customerAccount.maid,
+              customer: customerAccount,
+              staffId: customerAccount.staff._id,
+            });
+          }
+        } catch (error) {
+          console.error(
+            `Error processing trial expiry for customer account ${customerAccount._id}:`,
+            error
+          );
+        }
       }
-    );
-    console.log(`Updated ${result.length} expired trials`);
+
+      console.log(`Updated ${expiredTrials.length} expired trials`);
+    });
+
+    console.log("Successfully updated expired trials.");
   } catch (error) {
     console.error("Error updating expired trials:", error);
+  } finally {
+    session.endSession();
   }
 };
-const updateExpiredRecords = () => {
-  updateExpiredTrials();
-  updateExpiredMonthlyHires();
+
+const updateExpiredRecords = async () => {
+  console.log("Starting expired records update...");
+
+  try {
+    await Promise.all([updateExpiredTrials(), updateExpiredMonthlyHires()]);
+
+    console.log("Successfully completed expired records update.");
+  } catch (error) {
+    console.error("Error in updateExpiredRecords:", error);
+  }
 };
 
 cron.schedule("0 * * * *", updateExpiredRecords);
