@@ -33,6 +33,9 @@ const visaSchema = new mongoose.Schema({
     type: String,
     required: false,
   },
+  registrationFrom: {
+    type: String,
+  },
   passportNo: {
     type: String,
     required: true,

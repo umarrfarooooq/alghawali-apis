@@ -37,15 +37,21 @@ exports.getAllVisas = async (req, res) => {
 
 exports.addVisaDetails = async (req, res) => {
   try {
-    const { maidName, dateEntry, visaEndTime, passportNo, nationality } =
-      req.body;
+    const {
+      maidName,
+      dateEntry,
+      visaEndTime,
+      passportNo,
+      nationality,
+      registrationFrom,
+    } = req.body;
 
     const maidImage =
       req.files &&
       req.files["maidImage"] &&
       req.files["maidImage"][0] &&
       req.files["maidImage"][0].path;
-    
+
     const visaFile =
       req.files &&
       req.files["visaFile"] &&
@@ -58,12 +64,13 @@ exports.addVisaDetails = async (req, res) => {
       visaEndTime,
       passportNo,
       visaFile,
+      registrationFrom,
       maidImage,
     });
 
     let saveOperations = [newVisa.save()];
 
-    if (nationality?.toLowerCase() !== 'myanmar') {
+    if (nationality?.toLowerCase() !== "myanmar") {
       const newMedical = new Medical({
         maidName,
         entryDate: dateEntry,
@@ -76,9 +83,10 @@ exports.addVisaDetails = async (req, res) => {
     await Promise.all(saveOperations);
 
     res.status(201).json({
-      message: nationality?.toLowerCase() === 'myanmar' 
-        ? "Visa details added successfully"
-        : "Visa details added successfully with corresponding medical record",
+      message:
+        nationality?.toLowerCase() === "myanmar"
+          ? "Visa details added successfully"
+          : "Visa details added successfully with corresponding medical record",
     });
   } catch (error) {
     console.error("Error adding visa details:", error);
